@@ -1,0 +1,7 @@
+# Game-derived data (map data, icons, maps, quest text) is downloaded or built locally, never committed
+assets/
+# Saves never belong in the repo
+*.sav
+__pycache__/
+*.part
+.claude/

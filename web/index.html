@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TotK Progress Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside id="panel">
+  <header class="panel-head">
+    <h1>TotK Progress</h1>
+    <div id="status" class="status">Loading…</div>
+    <div class="tabs" id="tabs" role="tablist">
+      <button data-tab="map" class="on" role="tab">Map</button>
+      <button data-tab="quests" role="tab">Quests</button>
+    </div>
+  </header>
+
+  <section class="controls">
+    <label class="field">
+      <span>Save</span>
+      <select id="slot"></select>
+    </label>
+    <div class="seg view-map" id="mode" role="radiogroup" aria-label="Show">
+      <button data-mode="missing" class="on">Missing</button>
+      <button data-mode="done">Done</button>
+      <button data-mode="all">All</button>
+    </div>
+    <div class="seg seg4 view-quests" id="qmode" role="radiogroup" aria-label="Quest status">
+      <button data-q="active" class="on">Active</button>
+      <button data-q="available">To do</button>
+      <button data-q="done">Done</button>
+      <button data-q="all">All</button>
+    </div>
+    <input id="search" type="search" placeholder="Search names…" autocomplete="off">
+  </section>
+
+  <section id="summary" class="summary view-map"></section>
+  <section id="legend" class="legend view-map"></section>
+
+  <section id="qsummary" class="summary view-quests"></section>
+  <section id="quests" class="quests view-quests"></section>
+
+  <footer class="panel-foot view-map">
+    <button id="all-on" class="link">Show all</button>
+    <button id="all-off" class="link">Hide all</button>
+    <span class="hint">Click a marker for details</span>
+  </footer>
+  <footer class="panel-foot view-quests">
+    <label class="check"><input type="checkbox" id="qtargets" checked> <i class="dot gold"></i> Active quest targets on map</label>
+    <label class="check"><input type="checkbox" id="qstarts"> <i class="dot blue"></i> Where to start quests</label>
+  </footer>
+</aside>
+
+<main id="main">
+  <nav class="layers" id="layers">
+    <button data-layer="sky"><img src="/assets/icons/sky.png" alt="">Sky</button>
+    <button data-layer="surface" class="on"><img src="/assets/icons/surface.png" alt="">Surface</button>
+    <button data-layer="depths"><img src="/assets/icons/depths.png" alt="">Depths</button>
+  </nav>
+  <button id="panel-toggle" class="panel-toggle" aria-label="Toggle panel">☰</button>
+  <div id="map"></div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
