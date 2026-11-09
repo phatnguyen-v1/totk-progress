@@ -7,8 +7,8 @@ Where the project stands, what was learned along the way, and what's next. Updat
 | | |
 |---|---|
 | Latest release | [v1.4.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.4.0): everything from the game files (no downloads), 147 Bubbul frogs, 366 places, map tiles fix |
-| Release exe | (filled in after the build) |
-| Release check | (pending) |
+| Release exe | 24.4 MB, SHA-256 `4e0924e3ca87fc69cbc525e034bc9e79c7b9759389f33ed85cd45090cd7bce63` |
+| Release check | downloaded exe, clean data folder: app window, saves-only folder refused, setup 42 s, no errors, no downloads; 147 Bubbul frogs, 366 places, 107 + 100 Korok routes, 23 game icons; progress, 253 quests and Link's position read; Quit exits |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
