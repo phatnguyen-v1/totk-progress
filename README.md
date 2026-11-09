@@ -24,29 +24,41 @@ in dialogue scripts; the app infers series from quests by the same NPC that are 
 in the adventure log (36 quests). Letters, statues and the Mysterious Voice aren't series.
 
 It re-reads the save every few seconds, so the map updates on its own whenever the game saves.
+It only ever reads your game and save files; it never writes to them.
 
-## Run
+## Get started
 
-Double-click `start.bat`, or:
+1. Download `TotKProgressMap.exe` from [Releases](../../releases/latest) and put it anywhere.
+2. Double-click it. Your browser opens the setup page (Windows may say the app is unrecognized:
+   *More info* → *Run anyway*; the exe isn't code-signed).
+3. Pick your TotK Recomp folder (the one with `totk.exe`). The app looks on your drives and usually
+   finds it; otherwise click **Browse…**. It tells you if the folder has game files and saves.
+4. Click **Set up**. It downloads the map data (~45 MB) and reads the quest list from your game files.
+   Then the map opens with your progress.
+
+The app runs in the background with no window. Opening the exe again just reopens the page. To
+change the game folder or stop the app, use **⚙** at the top of the panel (*Quit app*).
+Settings and downloaded data are kept in `%LOCALAPPDATA%\TotKProgressMap`; delete that folder to reset.
+
+## Run from source
+
+Needs Python 3.10+. Double-click `start.bat`, or:
 
 ```
-python fetch_assets.py           # once: map data, icons, maps (~45 MB) into assets/
-pip install --user zstandard     # once: needed to read the game's compressed files
-python build_quests.py           # once: quest list + English text from your own game files
-python server.py                 # opens http://localhost:8787/
+pip install -r requirements.txt   # zstandard, to read the game's compressed files
+python server.py                  # opens http://localhost:8787/ and walks you through setup
 ```
 
-`build_quests.py` reads `RSDB/Challenge` and `Mals/USen` from the TotK Recomp `romfs` folder
-(`romfs.bin` + `index.json`, found under `%TOTK_DIR%` or `<drive>:\Games\TotK`; use `--romfs` otherwise, `--lang EUen`
-etc. for another language). Without it the map works and the Quests tab says how to enable it.
+Running from source keeps data next to the code (`assets/`, `config.json`). `build_exe.bat` builds
+`dist\TotKProgressMap.exe` with PyInstaller; pushing a `v*` tag builds it on GitHub Actions and
+attaches it to a release.
 
-Options: `--save-dir <folder>` (TotK Recomp install folder, its `profile\save`, or a folder with
-`slot_00`..`slot_05`), `--port 8787`, `--host 127.0.0.1`, `--no-browser`. Without `--save-dir` it
-uses `profile\save\<user>` of the TotK Recomp install in `%TOTK_DIR%` (set it to your install
-folder) or the first `<drive>:\Games\TotK` that has saves. `python fetch_assets.py --small` gets 1500 px maps instead
-of 4500 px ones.
+Command-line tools: `python fetch_assets.py [--small]` downloads the map data (`--small` = 1500 px
+maps), `python build_quests.py [--romfs DIR] [--lang EUen]` rebuilds the quest list (other
+languages: `EUen`, `EUfr`, `EUde`, `JPja`, ...). `server.py` options: `--save-dir <folder>` (read
+saves from there instead of the configured install), `--port 8787`, `--host 127.0.0.1`, `--no-browser`.
 
-Needs Python 3.9+ (standard library only) and internet for Leaflet (cdnjs) and the first asset download.
+The map page loads Leaflet from cdnjs, so the browser needs internet.
 
 ## How it works
 

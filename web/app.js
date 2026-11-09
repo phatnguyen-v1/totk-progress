@@ -406,8 +406,124 @@ $('#all-on').onclick = () => { state.off.clear(); store.set('off', []); renderLe
 $('#all-off').onclick = () => { CATS.forEach(c => state.off.add(c.key)); store.set('off', [...state.off]); renderLegend(); render(); };
 $('#panel-toggle').onclick = () => document.body.classList.toggle('panel-open');
 
+// ---------- setup / settings ----------
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-TotK-Progress': '1' }, body: JSON.stringify(body || {}) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+const setup = { selected: null, candidates: [], firstRun: false, polling: null };
+
+function badgeHtml(info) {
+  const b = [];
+  b.push(info.exe || info.game ? '<span class="badge ok">TotK Recomp</span>' : '<span class="badge warn">Save folder only</span>');
+  b.push(info.slots ? `<span class="badge ok">${info.slots} save slot${info.slots === 1 ? '' : 's'}</span>` : '<span class="badge warn">No saves yet</span>');
+  b.push(info.game ? '<span class="badge ok">Quests available</span>' : '<span class="badge warn">No quest data</span>');
+  return `<div class="badges">${b.join('')}</div>`;
+}
+
+function renderCandidates() {
+  const el = $('#cands');
+  const list = [...setup.candidates];
+  if (setup.selected && !list.some(c => c.path.toLowerCase() === setup.selected.path.toLowerCase())) list.unshift(setup.selected);
+  if (!list.length) {
+    el.innerHTML = '<div class="muted">No TotK Recomp folder found automatically. Click <b>Browse…</b> and pick the folder that has <code>totk.exe</code>.</div>';
+  } else {
+    el.innerHTML = list.map((c, i) => `<button class="cand ${setup.selected && setup.selected.path === c.path ? 'sel' : ''}" data-i="${i}">
+      <span class="radio"></span><span><div class="p">${esc(c.path)}</div>${badgeHtml(c)}</span></button>`).join('');
+    el.querySelectorAll('.cand').forEach(b => b.onclick = () => { selectFolder(list[+b.dataset.i]); });
+  }
+}
+
+function selectFolder(info) {
+  setup.selected = info;
+  renderCandidates();
+  const ch = $('#choice');
+  ch.hidden = !(info && info.notes && info.notes.length);
+  ch.innerHTML = info && info.notes ? info.notes.map(n => `<div class="note">${esc(n)}</div>`).join('') : '';
+  $('#setup-go').disabled = !(info && info.ok);
+}
+
+async function openSetup(firstRun) {
+  setup.firstRun = firstRun;
+  $('#setup').hidden = false;
+  $('#setup-close').hidden = firstRun;
+  $('#setup-go').textContent = firstRun ? 'Set up' : 'Save';
+  $('#setup-error').hidden = true;
+  $('#job').hidden = true;
+  $('#cands').innerHTML = '<div class="muted">Looking for your game…</div>';
+  try {
+    const st = await getJSON('/api/setup?scan=1');
+    $('#data-dir').textContent = st.data_dir;
+    $('#setup-foot').textContent = `Version ${st.version}` + (st.install ? ` · current folder: ${st.install.path}` : '');
+    setup.candidates = st.candidates || [];
+    selectFolder(st.install && st.install.ok ? st.install : (setup.candidates[0] || null));
+    if (st.job.running) watchJob();
+  } catch (e) {
+    $('#cands').innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+
+$('#browse').onclick = async () => {
+  $('#browse-note').textContent = 'A folder window opened, it may be behind this browser…';
+  try {
+    const r = await post('/api/setup/browse', { initial: setup.selected && setup.selected.path });
+    if (r.info) selectFolder(r.info);
+  } catch (e) {
+    $('#browse-note').textContent = e.message;
+    return;
+  }
+  $('#browse-note').textContent = '';
+};
+
+function watchJob() {
+  $('#job').hidden = false;
+  $('#setup-go').disabled = true;
+  clearInterval(setup.polling);
+  setup.polling = setInterval(async () => {
+    let st;
+    try { st = await getJSON('/api/setup'); } catch { return; }
+    const j = st.job;
+    $('#job-bar').style.width = `${Math.round(j.progress * 100)}%`;
+    $('#job-msg').textContent = j.message || '';
+    if (j.running) return;
+    clearInterval(setup.polling);
+    if (j.error) {
+      $('#setup-error').hidden = false;
+      $('#setup-error').textContent = j.error;
+      $('#setup-go').disabled = false;
+      $('#setup-go').textContent = 'Try again';
+    } else if (j.done) {
+      $('#job-msg').textContent = j.warning ? `Ready. ${j.warning}` : 'Ready! Loading your map…';
+      setTimeout(() => location.reload(), j.warning ? 2500 : 700);
+    }
+  }, 500);
+}
+
+$('#setup-go').onclick = async () => {
+  if (!setup.selected) return;
+  $('#setup-error').hidden = true;
+  try {
+    await post('/api/setup/apply', { path: setup.selected.path });
+    watchJob();
+  } catch (e) {
+    $('#setup-error').hidden = false;
+    $('#setup-error').textContent = e.message;
+  }
+};
+$('#setup-close').onclick = () => { $('#setup').hidden = true; };
+$('#open-settings').onclick = () => openSetup(false);
+$('#quit').onclick = async () => {
+  try { await post('/api/quit'); } catch {}
+  document.body.insertAdjacentHTML('beforeend', '<div class="bye"><div><h2>TotK Progress Map stopped.</h2><p>You can close this tab. Open the app again any time to see your progress.</p></div></div>');
+};
+
 (async function init() {
   try {
+    const st = await getJSON('/api/setup');
+    if (!st.ready) { setStatus('Setup needed'); await openSetup(true); return; }
     state.data = await getJSON('/data/map_data.json');
     try { state.quests = (await getJSON('/data/quests.json')).quests; } catch { state.quests = null; }
     setTab(state.tab);

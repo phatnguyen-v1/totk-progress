@@ -2,6 +2,13 @@
 assets/
 # Saves never belong in the repo
 *.sav
+# Local settings and logs
+config.json
+app.log
 __pycache__/
 *.part
 .claude/
+# Build output
+build/
+dist/
+*.spec

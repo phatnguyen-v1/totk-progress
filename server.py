@@ -1,62 +1,208 @@
-"""Local web app: TotK progress map from the save folder of TotK Recomp (or any progress.sav folder).
+"""TotK Progress Map: a local web app showing your Tears of the Kingdom progress from your saves.
 
-    python server.py [--save-dir DIR] [--port 8787] [--host 127.0.0.1] [--no-browser]
+    TotKProgressMap.exe            (or: python server.py [--save-dir DIR] [--port 8787] [--no-browser])
 
-Without --save-dir it looks for profile\\save\\<user>\\ under %TOTK_DIR% or <drive>:\\Games\\TotK.
+On first start the page shows a setup screen: pick the TotK Recomp install folder (found automatically
+when possible), then it downloads the map data and builds the quest list from your game files.
 """
 import argparse
 import json
 import mimetypes
 import os
+import string
 import struct
 import sys
 import threading
 import time
+import traceback
+import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import savefile
+from paths import APP_NAME, ASSETS, CONFIG, DATA, FROZEN, LOG, VERSION, WEB
 
-HERE = Path(__file__).resolve().parent
-WEB = HERE / 'web'
-ASSETS = HERE / 'assets'
-DEFAULT_INSTALLS = ([Path(os.environ['TOTK_DIR'])] if os.environ.get('TOTK_DIR') else []) + \
-    [Path(f'{d}:/Games/TotK') for d in 'CDEFG'] + [Path.home() / 'Games' / 'TotK']
+APP_ID = 'totk-progress-map'
+CSRF_HEADER = 'X-TotK-Progress'   # POSTs must carry it, so other websites can't drive this local app
 
 
-def find_save_dir(explicit):
-    if explicit:
-        p = Path(explicit)
-        # Accept the install folder, profile\save, or the user folder itself
-        for cand in (p, p / 'save', p / 'profile' / 'save'):
-            users = [d for d in cand.glob('*') if d.is_dir() and any(d.glob('slot_0*/progress.sav'))]
-            if any(cand.glob('slot_0*/progress.sav')):
-                return cand
-            if users:
-                return max(users, key=lambda d: d.stat().st_mtime)
-        sys.exit(f'No slot_0X/progress.sav found under {p}')
-    for inst in DEFAULT_INSTALLS:
-        users = [d for d in (inst / 'profile' / 'save').glob('*') if any(d.glob('slot_0*/progress.sav'))]
-        if users:
-            return max(users, key=lambda d: d.stat().st_mtime)
-    sys.exit('Save folder not found. Pass --save-dir <TotK install folder or profile\\save>.')
+# ---------------------------------------------------------------- install folders
 
+def _saves_under(folder):
+    """The most recently used <user> folder with slot_0X/progress.sav under `folder` (or folder itself)."""
+    folder = Path(folder)
+    try:
+        if any(folder.glob('slot_0*/progress.sav')):
+            return folder
+        users = [d for d in folder.glob('*') if d.is_dir() and any(d.glob('slot_0*/progress.sav'))]
+    except OSError:
+        return None
+    return max(users, key=lambda d: d.stat().st_mtime) if users else None
+
+
+def inspect(path):
+    """Check a folder the user picked. Accepts the install folder or anything inside it (romfs, profile, save)."""
+    p = Path(path).expanduser()
+    info = {'input': str(p), 'path': str(p), 'game': False, 'save_dir': None, 'slots': 0, 'ok': False, 'notes': []}
+    if not p.is_dir():
+        info['notes'].append('This folder does not exist.')
+        return info
+    root = None
+    for cand in [p, *list(p.parents)[:4]]:
+        if (cand / 'romfs' / 'index.json').is_file() or (cand / 'profile' / 'save').is_dir() or (cand / 'totk.exe').is_file():
+            root = cand
+            break
+    if root:
+        info['path'] = str(root)
+        info['game'] = (root / 'romfs' / 'index.json').is_file()
+        save_dir = _saves_under(root / 'profile' / 'save')
+    else:
+        save_dir = _saves_under(p) or _saves_under(p / 'save')   # a plain save folder (e.g. from an emulator)
+    if save_dir:
+        info['save_dir'] = str(save_dir)
+        info['slots'] = sum(1 for _ in save_dir.glob('slot_0*/progress.sav'))
+    if root and not info['game']:
+        info['notes'].append('Game files (romfs) not found here, so the Quests tab will be off.')
+    if not root and not save_dir:
+        info['notes'].append("This doesn't look like a TotK Recomp folder: no totk.exe, romfs or profile\\save inside.")
+    elif not save_dir:
+        info['notes'].append("No saves yet. Play until the game saves once, and the map will pick it up.")
+    info['ok'] = bool(root or save_dir)
+    info['exe'] = bool(root and (root / 'totk.exe').is_file())
+    return info
+
+
+def detect_installs():
+    """Look for TotK Recomp installs in the usual places. Fast: only a couple of folder levels per drive."""
+    roots = []
+    if os.environ.get('TOTK_DIR'):
+        roots.append(Path(os.environ['TOTK_DIR']))
+    drives = [Path(f'{d}:/') for d in string.ascii_uppercase if os.path.exists(f'{d}:/')] if os.name == 'nt' else [Path('/')]
+    home = Path.home()
+    bases = [*drives, *[d / 'Games' for d in drives], home, home / 'Games', home / 'Desktop', home / 'Downloads']
+    for base in bases:
+        try:
+            for d in base.iterdir():
+                if d.is_dir() and ((d / 'totk.exe').is_file() or (d / 'romfs' / 'index.json').is_file()):
+                    roots.append(d)
+        except OSError:
+            continue
+    seen, out = set(), []
+    for r in roots:
+        key = str(r.resolve()).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        info = inspect(r)
+        if info['ok']:
+            out.append(info)
+    out.sort(key=lambda i: (not i['save_dir'], not i['game']))
+    return out
+
+
+def load_config():
+    try:
+        return json.loads(CONFIG.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_config(cfg):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(cfg, indent=2), encoding='utf-8')
+
+
+# ---------------------------------------------------------------- state
 
 class State:
-    def __init__(self, save_dir):
-        self.save_dir = save_dir
-        self.map_data = json.loads((ASSETS / 'map_data.json').read_text(encoding='utf-8'))
-        qfile = ASSETS / 'quests.json'
-        qdata = json.loads(qfile.read_text(encoding='utf-8')) if qfile.exists() else {}
-        self.quests = qdata.get('quests')
-        self.logic = qdata.get('logic')
-        self.cache = {}  # slot -> (mtime_ns, size, result)
+    def __init__(self, save_override=None):
         self.lock = threading.Lock()
+        self.cfg = load_config()
+        self.save_override = save_override
+        self.install = None
+        self.save_dir = None
+        self.map_data = self.quests = self.logic = None
+        self.cache = {}
+        self.job = {'running': False, 'progress': 0.0, 'message': '', 'error': None, 'done': False}
+        self.reload()
 
+    def reload(self):
+        """Re-read config, install folder and assets."""
+        self.install = inspect(self.cfg['install_dir']) if self.cfg.get('install_dir') else None
+        sd = self.save_override or (self.install or {}).get('save_dir')
+        self.save_dir = Path(sd) if sd else None
+        mp = ASSETS / 'map_data.json'
+        self.map_data = json.loads(mp.read_text(encoding='utf-8')) if mp.is_file() else None
+        qfile = ASSETS / 'quests.json'
+        qdata = json.loads(qfile.read_text(encoding='utf-8')) if qfile.is_file() else {}
+        self.quests, self.logic = qdata.get('quests'), qdata.get('logic')
+        with self.lock:
+            self.cache.clear()
+
+    def ready(self):
+        import fetch_assets
+        return bool(self.save_dir) and self.map_data is not None and fetch_assets.have_assets()
+
+    def setup_status(self, with_candidates=False):
+        import fetch_assets
+        st = {
+            'version': VERSION, 'ready': self.ready(), 'install': self.install,
+            'save_override': self.save_override, 'data_dir': str(DATA),
+            'assets': {'map': fetch_assets.have_assets(), 'quests': self.quests is not None},
+            'job': dict(self.job),
+        }
+        if with_candidates:
+            st['candidates'] = detect_installs()
+        return st
+
+    def start_setup(self, folder):
+        info = inspect(folder)
+        if not info['ok']:
+            raise ValueError(' '.join(info['notes']) or 'Not a TotK folder.')
+        if self.job['running']:
+            raise ValueError('Setup is already running.')
+        self.cfg['install_dir'] = info['path']
+        save_config(self.cfg)
+        self.job = {'running': True, 'progress': 0.0, 'message': 'Starting…', 'error': None, 'done': False}
+        threading.Thread(target=self._setup_job, args=(info,), daemon=True).start()
+        return info
+
+    def _setup_job(self, info):
+        import fetch_assets
+        job = self.job
+        try:
+            if not fetch_assets.have_assets():
+                def prog(frac, msg):
+                    job['progress'] = round(frac * 0.85, 3)
+                    job['message'] = msg
+                try:
+                    fetch_assets.fetch_all(ASSETS, 'medium', prog)
+                except OSError as e:
+                    raise RuntimeError(f"Couldn't download the map data ({e}). Check your internet connection and try again.")
+            job['progress'], job['message'] = 0.88, 'Reading the quest list from your game files…'
+            if info['game']:
+                try:
+                    import build_quests
+                    build_quests.build(Path(info['path']) / 'romfs', ASSETS / 'quests.json', log=lambda m: None)
+                except Exception as e:  # the map still works without quests
+                    traceback.print_exc()
+                    job['warning'] = f'Quest list not built: {e}'
+            job['progress'], job['message'] = 1.0, 'Done'
+            self.reload()
+            job['done'] = True
+        except Exception as e:
+            traceback.print_exc()
+            job['error'] = str(e)
+        finally:
+            job['running'] = False
+
+    # ---- saves
     def slots(self):
         out = []
+        if not self.save_dir:
+            return out
         for d in sorted(self.save_dir.glob('slot_0*')):
             f = d / 'progress.sav'
             if not f.is_file():
@@ -65,16 +211,14 @@ class State:
             entry = {'slot': int(d.name[-1]), 'mtime': st.st_mtime}
             try:
                 entry.update(savefile.save_info(f))
-            except (savefile.SaveError, OSError) as e:
+            except (savefile.SaveError, OSError, struct.error) as e:
                 entry['error'] = str(e)
             out.append(entry)
         return out
 
     def latest_slot(self):
         ok = [s for s in self.slots() if 'error' not in s]
-        if not ok:
-            return None
-        return max(ok, key=lambda s: (s['mtime'], s['playtime']))['slot']
+        return max(ok, key=lambda s: (s['mtime'], s['playtime']))['slot'] if ok else None
 
     def progress(self, slot):
         f = self.save_dir / f'slot_{slot:02d}' / 'progress.sav'
@@ -84,9 +228,8 @@ class State:
             hit = self.cache.get(slot)
             if hit and hit[0] == key:
                 return hit[1]
-        # The game may be writing the file: retry a few times on a torn read
         last = None
-        for _ in range(5):
+        for _ in range(5):  # the game may be writing the file: retry on a torn read
             try:
                 result = savefile.parse(f, self.map_data)
                 if self.quests:
@@ -103,7 +246,30 @@ class State:
         return result
 
 
-def make_handler(state):
+# ---------------------------------------------------------------- folder picker
+
+_dialog_lock = threading.Lock()
+
+
+def pick_folder(initial=None):
+    """Open the normal Windows folder picker on top of everything. Returns a path or None."""
+    with _dialog_lock:
+        import tkinter
+        from tkinter import filedialog
+        root = tkinter.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        try:
+            chosen = filedialog.askdirectory(parent=root, mustexist=True, initialdir=initial or str(Path.home()),
+                                             title='Select your TotK Recomp folder (the one with totk.exe)')
+        finally:
+            root.destroy()
+        return chosen or None
+
+
+# ---------------------------------------------------------------- HTTP
+
+def make_handler(state, server_ref):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass
@@ -120,7 +286,7 @@ def make_handler(state):
         def send_file(self, path, cache=False):
             try:
                 path = path.resolve()
-                if not (path.is_relative_to(WEB) or path.is_relative_to(ASSETS)) or not path.is_file():
+                if not (path.is_relative_to(WEB.resolve()) or path.is_relative_to(ASSETS.resolve())) or not path.is_file():
                     raise FileNotFoundError
             except (FileNotFoundError, OSError, ValueError):
                 self.send_error(404)
@@ -139,21 +305,26 @@ def make_handler(state):
             q = parse_qs(url.query)
             p = url.path
             try:
-                if p == '/api/slots':
-                    self.send_json({'save_dir': str(state.save_dir), 'latest': state.latest_slot(),
-                                    'slots': state.slots()})
+                if p == '/api/ping':
+                    self.send_json({'app': APP_ID, 'version': VERSION})
+                elif p == '/api/setup':
+                    self.send_json(state.setup_status(with_candidates=q.get('scan', ['0'])[0] == '1'))
+                elif p in ('/api/slots', '/api/progress') and not state.ready():
+                    self.send_json({'error': 'setup required', 'setup': True}, 409)
+                elif p == '/api/slots':
+                    self.send_json({'save_dir': str(state.save_dir), 'latest': state.latest_slot(), 'slots': state.slots()})
                 elif p == '/api/progress':
                     slot = q.get('slot', [''])[0]
                     slot = state.latest_slot() if slot in ('', 'latest') else int(slot)
                     if slot is None:
-                        self.send_json({'error': 'no readable save'}, 404)
+                        self.send_json({'error': 'no readable save yet'}, 404)
                     else:
                         self.send_json(state.progress(slot))
                 elif p == '/data/map_data.json':
                     self.send_file(ASSETS / 'map_data.json', cache=True)
                 elif p == '/data/quests.json':
                     if state.quests is None:
-                        self.send_json({'error': 'quests.json missing: run python build_quests.py'}, 404)
+                        self.send_json({'error': 'quest list not built'}, 404)
                     else:
                         self.send_file(ASSETS / 'quests.json')
                 elif p.startswith('/assets/'):
@@ -165,34 +336,94 @@ def make_handler(state):
             except (ValueError, savefile.SaveError, OSError) as e:
                 self.send_json({'error': str(e)}, 500)
 
+        def do_POST(self):
+            if self.headers.get(CSRF_HEADER) != '1':
+                self.send_json({'error': 'forbidden'}, 403)
+                return
+            try:
+                length = int(self.headers.get('Content-Length') or 0)
+                body = json.loads(self.rfile.read(length) or b'{}') if length else {}
+            except ValueError:
+                self.send_json({'error': 'bad request'}, 400)
+                return
+            p = urlparse(self.path).path
+            try:
+                if p == '/api/setup/browse':
+                    start = body.get('initial') or (state.install or {}).get('path')
+                    chosen = pick_folder(start)
+                    self.send_json({'path': chosen, 'info': inspect(chosen) if chosen else None})
+                elif p == '/api/setup/check':
+                    self.send_json(inspect(body.get('path', '')))
+                elif p == '/api/setup/apply':
+                    info = state.start_setup(body.get('path', ''))
+                    self.send_json({'ok': True, 'info': info})
+                elif p == '/api/quit':
+                    self.send_json({'ok': True})
+                    threading.Thread(target=lambda: (time.sleep(0.3), server_ref[0].shutdown()), daemon=True).start()
+                else:
+                    self.send_json({'error': 'not found'}, 404)
+            except ValueError as e:
+                self.send_json({'error': str(e)}, 400)
+
     return Handler
+
+
+class Server(ThreadingHTTPServer):
+    allow_reuse_address = False   # on Windows SO_REUSEADDR would let a second copy share the port
+    daemon_threads = True
+
+
+def already_running(host, port):
+    try:
+        with urllib.request.urlopen(f'http://{host}:{port}/api/ping', timeout=1.5) as r:
+            return json.loads(r.read()).get('app') == APP_ID
+    except (OSError, ValueError):
+        return False
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--save-dir')
+    ap.add_argument('--save-dir', help='read saves from this folder instead of the configured install')
     ap.add_argument('--port', type=int, default=int(os.environ.get('PORT', 8787)))
     ap.add_argument('--host', default='127.0.0.1')
     ap.add_argument('--no-browser', action='store_true')
     args = ap.parse_args()
 
-    if not (ASSETS / 'map_data.json').exists():
-        sys.exit('Assets missing: run  python fetch_assets.py  first.')
-    state = State(find_save_dir(args.save_dir))
-    srv = ThreadingHTTPServer((args.host, args.port), make_handler(state))
-    url = f'http://{"localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host}:{args.port}/'
-    print(f'Save folder: {state.save_dir}')
-    if state.quests is None:
-        print('Quests: off (run  python build_quests.py  to enable)')
-    else:
-        print(f'Quests: {len(state.quests)}')
-    print(f'Serving {url}  (Ctrl+C to stop)', flush=True)
+    if FROZEN:  # no console window: keep a log next to the data
+        DATA.mkdir(parents=True, exist_ok=True)
+        sys.stdout = sys.stderr = open(LOG, 'a', encoding='utf-8', buffering=1)
+    print(f'--- {APP_NAME} {VERSION} starting {time.ctime()}')
+
+    browse_host = 'localhost' if args.host in ('127.0.0.1', '0.0.0.0') else args.host
+    srv = None
+    for port in range(args.port, args.port + 10):
+        if already_running('127.0.0.1', port):   # second launch: just show the page again
+            print(f'Already running on {port}')
+            if not args.no_browser:
+                webbrowser.open(f'http://{browse_host}:{port}/')
+            return
+        try:
+            server_ref = [None]
+            state = State(args.save_dir)
+            srv = Server((args.host, port), make_handler(state, server_ref))
+            server_ref[0] = srv
+            break
+        except OSError:
+            continue
+    if srv is None:
+        print('No free port found.')
+        return
+    url = f'http://{browse_host}:{port}/'
+    print(f'Data folder: {DATA}')
+    print(f'Install: {(state.install or {}).get("path")}  ready={state.ready()}')
+    print(f'Serving {url}', flush=True)
     if not args.no_browser:
-        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    print('Stopped.')
 
 
 if __name__ == '__main__':

@@ -13,10 +13,10 @@ import sys
 from pathlib import Path
 
 import gamefiles
+from paths import ASSETS
 from savefile import mmh3
 
-HERE = Path(__file__).resolve().parent
-OUT = HERE / 'assets' / 'quests.json'
+OUT = ASSETS / 'quests.json'
 DEFAULT_ROMFS = ([Path(os.environ['TOTK_DIR']) / 'romfs'] if os.environ.get('TOTK_DIR') else []) + \
     [Path(f'{d}:/Games/TotK/romfs') for d in 'CDEFG'] + [Path.home() / 'Games' / 'TotK' / 'romfs']
 
@@ -64,11 +64,16 @@ def main():
     romfs = Path(args.romfs) if args.romfs else next((p for p in DEFAULT_ROMFS if (p / 'index.json').exists()), None)
     if not romfs or not (romfs / 'index.json').exists():
         sys.exit('TotK Recomp romfs folder not found. Pass --romfs <install folder>\\romfs.')
+    print(build(romfs, OUT, args.lang))
+
+
+def build(romfs, out=OUT, lang='USen', log=print):
+    """Read the quest table, messages and game data from `romfs` and write `out`. Returns a summary line."""
     rf = gamefiles.Romfs(romfs)
 
     table_path = rf.find('RSDB/Challenge.Product.', '.rstbl.byml.zs')[-1]
-    mals_path = rf.find(f'Mals/{args.lang}.Product.', '.sarc.zs')[-1]
-    print('Reading', table_path, 'and', mals_path)
+    mals_path = rf.find(f'Mals/{lang}.Product.', '.sarc.zs')[-1]
+    log(f'Reading {table_path} and {mals_path}')
     rows = gamefiles.byml(rf.read(table_path))
     mals = gamefiles.sarc(rf.read(mals_path))
 
@@ -81,7 +86,7 @@ def main():
 
     # Game data: flag defaults, enum value order and the boolean expressions behind quest prerequisites
     gd_path = rf.find('GameData/GameDataList.Product.', '.byml.zs')[-1]
-    print('Reading', gd_path)
+    log(f'Reading {gd_path}')
     gd = gamefiles.byml(rf.read(gd_path))['Data']
     bool_def = {x['Hash']: int(bool(x.get('DefaultValue', 0))) for x in gd.get('Bool', [])}
     enum_def = {x['Hash']: {'order': list(x['Values']), 'default': x.get('DefaultValue')} for x in gd.get('Enum', [])}
@@ -188,19 +193,22 @@ def main():
         for prev, q in zip(group, group[1:]):
             if q['sort'] - prev['sort'] == 1:
                 q['after'] = prev['id']
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({'source': {'table': table_path, 'messages': mals_path, 'gamedata': gd_path},
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix('.part')
+    tmp.write_text(json.dumps({'source': {'table': table_path, 'messages': mals_path, 'gamedata': gd_path},
                                'quests': quests, 'logic': logic},
                               ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
-    print(f'starts: {sum(1 for q in quests if q["start"]["exact"])} exact, '
-          f'{sum(1 for q in quests if q["start"]["points"] and not q["start"]["exact"])} approximate, '
-          f'{sum(1 for q in quests if not q["start"]["points"])} none; '
-          f'prerequisites: {sum(1 for q in quests if q["requires"])} ({len(logic["exprs"])} expressions); '
-          f'in a series: {sum(1 for q in quests if q.get("after"))}')
+    tmp.replace(out)
+    log(f'starts: {sum(1 for q in quests if q["start"]["exact"])} exact, '
+        f'{sum(1 for q in quests if q["start"]["points"] and not q["start"]["exact"])} approximate, '
+        f'{sum(1 for q in quests if not q["start"]["points"])} none; '
+        f'prerequisites: {sum(1 for q in quests if q["requires"])} ({len(logic["exprs"])} expressions); '
+        f'in a series: {sum(1 for q in quests if q.get("after"))}')
     by = {}
     for q in quests:
         by[q['category']] = by.get(q['category'], 0) + 1
-    print(f'{len(quests)} quests -> {OUT}  {by}')
+    return f'{len(quests)} quests -> {out}  {by}'
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@
 <body>
 <aside id="panel">
   <header class="panel-head">
-    <h1>TotK Progress</h1>
+    <div class="title-row"><h1>TotK Progress</h1><button id="open-settings" class="icon-btn" title="Settings" aria-label="Settings">⚙</button></div>
     <div id="status" class="status">Loading…</div>
     <div class="tabs" id="tabs" role="tablist">
       <button data-tab="map" class="on" role="tab">Map</button>
@@ -63,6 +63,44 @@
   <button id="panel-toggle" class="panel-toggle" aria-label="Toggle panel">☰</button>
   <div id="map"></div>
 </main>
+
+<div id="setup" class="setup" hidden>
+  <div class="setup-card" role="dialog" aria-labelledby="setup-title">
+    <h2 id="setup-title">Set up TotK Progress Map</h2>
+    <p class="lead">Point the app at your TotK Recomp folder: the one with <code>totk.exe</code>. It reads your saves from
+      there and updates the map whenever the game saves. Nothing is ever written to your game or saves.</p>
+
+    <div class="setup-step">
+      <h3>1. Your game folder</h3>
+      <div id="cands" class="cands"><div class="muted">Looking for your game…</div></div>
+      <div class="row-btns">
+        <button id="browse" class="btn">Browse…</button>
+        <span id="browse-note" class="muted"></span>
+      </div>
+      <div id="choice" class="choice" hidden></div>
+    </div>
+
+    <div class="setup-step">
+      <h3>2. Map and quest data</h3>
+      <p class="muted">The first time, the app downloads the map images and object data (about 45&nbsp;MB, from
+        <a href="https://github.com/lud99/totk-unexplored" target="_blank" rel="noopener">lud99/totk-unexplored</a>) and reads the
+        quest list from your own game files. It's stored in <code id="data-dir"></code>.</p>
+      <div id="job" class="job" hidden>
+        <div class="bar"><i id="job-bar"></i></div>
+        <div id="job-msg" class="muted"></div>
+      </div>
+      <div id="setup-error" class="err" hidden></div>
+    </div>
+
+    <div class="setup-actions">
+      <button id="setup-go" class="btn primary" disabled>Set up</button>
+      <button id="setup-close" class="btn" hidden>Close</button>
+      <span class="spacer"></span>
+      <button id="quit" class="btn quiet" title="Stop the app (it runs in the background)">Quit app</button>
+    </div>
+    <div class="setup-foot muted" id="setup-foot"></div>
+  </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="app.js"></script>
