@@ -7,8 +7,8 @@ Where the project stands, what was learned along the way, and what's next. Updat
 | | |
 |---|---|
 | Latest release | [v1.2.1](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.2.1): in-game map icons; v1.2.0 built the map and collectibles from the user's own game files |
-| Release exe | (filled in after the build) |
-| Release check | (pending) |
+| Release exe | 20.3 MB, SHA-256 `f8c5c29ead4a42ece407f79caff8b305580bedc2b25a489af49137b49ae95441` |
+| Release check | downloaded exe, clean data folder: setup 42 s, no errors, 22 game icons, 7 Korok seeds / 4 shrines / 253 quests read |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
