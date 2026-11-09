@@ -6,20 +6,19 @@ Where the project stands, what was learned along the way, and what's next. Updat
 
 | | |
 |---|---|
-| Latest release | [v1.1.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.1.0): exe with guided setup, map data downloaded from lud99 |
-| `main` | v1.2.0 (commit `cfebb32`, not released yet): map, icons and collectibles built from the user's own game files |
-| Exe size | 12 MB (v1.1.0) → 28.5 MB (v1.2.0, Pillow for WebP tiles) |
+| Latest release | [v1.2.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.2.0): map, icons and collectibles built from the user's own game files |
+| Release exe | 18.3 MB, SHA-256 `69c85bc73ec121cb755076ce411dff12b3f3f74472760e48429bb604a3651676` (a local build is 28.5 MB; CI's Pillow is smaller) |
+| Release check | downloaded exe, clean data folder: setup 42 s, no errors, 7 Korok seeds / 4 shrines / 253 quests read, tiles served |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
-1. Release v1.2.0 (push tag `v1.2.0`; GitHub Actions builds and attaches the exe).
-2. Before posting on Reddit (r/decomps first):
+1. Before posting on Reddit (r/decomps first):
    - VirusTotal scan of the release exe, link + SHA-256 in the release notes
    - screenshots / GIF in the README (map, Quests tab)
    - test the Browse… folder picker, a game folder outside `<drive>:\Games\TotK`, another Windows user,
      game 1.4.3 saves, non-English game files
    - release text with an FAQ (SmartScreen warning, read-only, what "Queued" means)
-3. Courtesy note to lud99 (their `map_data.json` is still used for Korok puzzle details).
+2. Courtesy note to lud99 (their `map_data.json` is still used for Korok puzzle details).
 
 ## Done
 
@@ -50,7 +49,7 @@ Where the project stands, what was learned along the way, and what's next. Updat
 - The page says "The app is not running…" instead of "Failed to fetch" when the background app was quit,
   and reconnects on its own (`67797a6`).
 
-## v1.2.0 (on `main`, unreleased): map built from the user's own game files (2026-11-09, `cfebb32`)
+## v1.2.0 (released 2026-11-09): map built from the user's own game files (`cfebb32`)
 
 Goal: no third-party download for TotK Recomp users; the repo ships no game-derived files.
 
@@ -62,7 +61,7 @@ Goal: no third-party download for TotK Recomp users; the repo ships no game-deri
 | 4. Korok seeds, bosses, old maps, schematics, Sage's Wills, Addison's signs | done |
 | 5. Check against lud99's data and real saves | done: every save flag matches (see below) |
 | 6. Setup builds everything locally; lud99 only for Korok puzzle details / fallback | done |
-| 7. Tests, rebuild exe, docs | done; committed and pushed (`cfebb32`); release pending |
+| 7. Tests, rebuild exe, docs, release | done: v1.2.0 released and checked |
 
 Clean first run of the exe: 42 s, 14.2 MB data, same progress as before (7 Korok seeds, 4 shrines on
 the test save). Existing installs rebuild in the background on the first start after updating, and
