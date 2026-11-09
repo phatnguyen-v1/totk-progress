@@ -12,7 +12,7 @@ ICONS = {
     # Koroks & shrines
     'korok_hidden': ('#c98a2b', '<path d="M16 6c6 4 8 10 3 18-1 1-2 2-3 2s-2-1-3-2C8 16 10 10 16 6z"/><path d="M16 9v15" stroke="#7a4f12" stroke-width="1.6" fill="none"/>', W),
     'korok_carry': ('#c98a2b', '<path d="M11 7c4 3 5 7 2 13-1 1-2 1-3 0-3-5-2-10 1-13z"/><path d="M21 9c4 3 5 7 2 13-1 1-2 1-3 0-3-5-2-10 1-13z"/>', W),
-    'shrine': ('#1f8fd1', '<path d="M16 5l9 6v15H7V11z" fill="none" stroke-width="2.4" stroke-linejoin="round"/><path d="M12 26v-7a4 4 0 0 1 8 0v7"/>', W),
+    'shrine': ('#1f8fd1', '<path d="M8 24V14a8 8 0 0 1 16 0v10z"/><rect x="6.5" y="23.5" width="19" height="3" rx="1"/><path d="M12.5 23.5v-9a3.5 3.5 0 0 1 7 0v9z" fill="#0d3f63"/><circle cx="16" cy="17.5" r="2" fill="#7fe3ff"/>', W),
     'lightroot': ('#2aa38a', '<circle cx="16" cy="12" r="5"/><path d="M16 17v9M16 22l-5 4M16 22l5 4M16 12l0 0" stroke-width="2.2" stroke-linecap="round" fill="none"/>', '#eaffd0'),
     # Places
     'cave': ('#6d5a43', '<path d="M5 25c2-11 6-17 11-17s9 6 11 17z"/><path d="M11 25c1-5 3-8 5-8s4 3 5 8z" fill="#2b2118"/>', W),

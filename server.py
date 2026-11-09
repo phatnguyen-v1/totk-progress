@@ -175,6 +175,19 @@ class State:
         return bool(self.install and self.install.get('game')) and not (
             fetch_assets.have_game_tiles() and (ASSETS / 'source.json').is_file())
 
+    def build_icons(self, romfs=None):
+        """Map icons from the game files (a second or so). The app's own icons are used when this fails."""
+        try:
+            import build_icons
+            import gamefiles
+            rf = romfs or gamefiles.Romfs(Path(self.install['path']) / 'romfs')
+            build_icons.build(rf, ASSETS / 'gameicons', log=print)
+        except Exception:
+            traceback.print_exc()
+
+    def needs_icons(self):
+        return bool(self.install and self.install.get('game')) and not (ASSETS / 'gameicons' / 'meta.json').is_file()
+
     def start_upgrade(self):
         if self.install and not self.job['running']:
             self.job = {'running': True, 'progress': 0.0, 'message': 'Updating the map from your game files…',
@@ -200,6 +213,7 @@ class State:
                 rf = gamefiles.Romfs(romfs)
                 stage(0, 0.6)(0, 'Drawing the map from your game files…')
                 maptiles.build_tiles(rf, ASSETS / 'tiles', progress=stage(0, 0.6))
+                self.build_icons(rf)
                 stage(0.6, 0.75)(0, 'Finding shrines, Koroks and everything else in your game files…')
                 build_mapdata.build(romfs, ASSETS / 'map_data.json', log=lambda m: stage(0.6, 0.75)(0.5, m[:80]))
                 stage(0.75, 0.8)(0, 'Adding Korok puzzle details…')
@@ -458,6 +472,8 @@ def main():
     if state.ready() and state.needs_game_build():
         print('Map not built from the game files yet: updating in the background')
         state.start_upgrade()
+    elif state.ready() and state.needs_icons():
+        threading.Thread(target=state.build_icons, daemon=True).start()
     print(f'Serving {url}', flush=True)
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

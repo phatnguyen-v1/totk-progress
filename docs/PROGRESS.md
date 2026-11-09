@@ -6,9 +6,9 @@ Where the project stands, what was learned along the way, and what's next. Updat
 
 | | |
 |---|---|
-| Latest release | [v1.2.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.2.0): map, icons and collectibles built from the user's own game files |
-| Release exe | 18.3 MB, SHA-256 `69c85bc73ec121cb755076ce411dff12b3f3f74472760e48429bb604a3651676` (a local build is 28.5 MB; CI's Pillow is smaller) |
-| Release check | downloaded exe, clean data folder: setup 42 s, no errors, 7 Korok seeds / 4 shrines / 253 quests read, tiles served |
+| Latest release | [v1.2.1](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.2.1): in-game map icons; v1.2.0 built the map and collectibles from the user's own game files |
+| Release exe | (filled in after the build) |
+| Release check | (pending) |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
@@ -108,6 +108,24 @@ types and routes (all 900), and those ~27 extra places / 1 Bubbul frog. Offline,
 "Flying Korok" / "Hidden Korok" without routes.
 
 Bonus for later: `Drop__DropActor` gives the contents of all 1,341 field chests.
+
+## v1.2.1 (released 2026-11-09): in-game icons (`build_icons.py`)
+
+Markers now use the game's own icons, taken from the user's files at setup (0.5 s, 22 PNGs, 96 px, in
+`assets/gameicons/`); existing installs build them on the next start. `web/icons/*.svg` stay as the
+fallback (and for Addison's signs, which have no icon in the game).
+
+| Icon | Source |
+|---|---|
+| Korok seeds / friends, caves, wells, chasms, locations | map UI glyphs `MapIconKorok^w`, `MapIconKorok_x2^w`, `MapIconCave{M,S,L}_72x72^w`, `MapIconBuildingVillage_58x58^w` |
+| Shrines, lightroots, sky / surface / depths tabs | one-channel masks `MapIconDungeon_L_FrameIcon^s`, `MapIconArrivalPoint_L_FrameIcon^s`, `MapTabIcon_{Sky,Ground,Cave}^s`, coloured here (the game colours them in its layouts) |
+| Bubbul frogs, Sage's Wills, old maps, schema stones, Yiga schematics | item icons `UI/Tex/Icon/{CaveMasterMedal,Obj_SageWill,Obj_TreasureMap_00,Obj_AutoBuilderDraft_00,Obj_AutoBuilderDraftAssassin_00}` |
+| Bosses | compendium pictures `UI/Tex/PictureBook/Enemy_{Giant,Golem,Mogurudo,Zonau_BlockMaster}_Middle_Icon`, `Enemy_Sandworm_Icon`, `Enemy_Drake_Fire_Icon`, cut to a circle |
+
+Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (SARC) ->
+`timg/__Combined.bntx` (1,231 textures). Texture name at `BRTI+0x60` (pointer to u16 length + text).
+Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
+plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
 
 ## Ideas for later
 - "What changed since last save" feed, You-are-here (`PlayerStatus.SavePos`), nearest missing items.

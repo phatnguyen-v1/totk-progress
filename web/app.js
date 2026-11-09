@@ -81,7 +81,11 @@ async function setupBaseMaps() {
   for (const l of ['surface', 'sky', 'depths'])
     overlays[l] = meta ? gameTileLayer(l) : L.imageOverlay(`/assets/map/${l}.png`, bounds);
   state.mapSource = meta ? 'game' : 'download';
+  // Icons taken from the player's own game files (build_icons.py); the app's own SVGs otherwise.
+  try { state.gameIcons = new Set((await getJSON('/assets/gameicons/meta.json')).icons); } catch {}
+  document.querySelectorAll('#layers img[data-icon]').forEach(img => { img.src = iconSrc(img.dataset.icon); });
 }
+const iconSrc = name => (state.gameIcons && state.gameIcons.has(name) ? `/assets/gameicons/${name}.png` : `/icons/${name}.svg`);
 map.fitBounds(bounds);
 map.setMaxBounds(L.latLngBounds(bounds).pad(0.2));
 const markerLayer = L.layerGroup().addTo(map);
@@ -102,7 +106,7 @@ function icon(cat, done) {
     const s = cat.size || 24;
     iconCache[k] = L.divIcon({
       className: 'mk' + (done ? ' done' : ''),
-      html: `<img src="/icons/${cat.icon}.svg" alt="">`,
+      html: `<img src="${iconSrc(cat.icon)}" alt="">`,
       iconSize: [s, s], iconAnchor: [s / 2, s / 2], popupAnchor: [0, -s / 2],
     });
   }
@@ -169,7 +173,7 @@ function renderLegend() {
     const b = document.createElement('button');
     b.className = 'cat' + (state.off.has(cat.key) ? ' off' : '') + (total && n === total ? ' complete' : '');
     b.title = state.off.has(cat.key) ? 'Show on map' : 'Hide from map';
-    b.innerHTML = `<img src="/icons/${cat.icon}.svg" alt=""><span>${esc(cat.label)}</span><span class="n">${n} / ${total}</span>
+    b.innerHTML = `<img src="${iconSrc(cat.icon)}" alt=""><span>${esc(cat.label)}</span><span class="n">${n} / ${total}</span>
       <span class="bar"><i style="width:${total ? (100 * n / total).toFixed(1) : 0}%"></i></span>`;
     b.onclick = () => { state.off.has(cat.key) ? state.off.delete(cat.key) : state.off.add(cat.key); store.set('off', [...state.off]); renderLegend(); render(); };
     el.appendChild(b);

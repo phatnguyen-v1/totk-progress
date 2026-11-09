@@ -36,11 +36,24 @@ def deswizzle(data, width_blocks, height_blocks, bpp, block_height_log2):
     return bytes(out)
 
 
-def decode_bntx(data):
-    """First texture of a BNTX file -> (width, height, RGBA bytes)."""
-    i = data.find(b'BRTI')
-    if i < 0:
-        raise ValueError('no BRTI texture')
+# Block-compressed formats besides ASTC: kind -> (bytes per 4x4 block, decoder)
+BC_FORMATS = {0x1A: (8, 'decode_bc1'), 0x1C: (16, 'decode_bc3'), 0x1D: (8, 'decode_bc4'),
+              0x1E: (16, 'decode_bc5'), 0x20: (16, 'decode_bc7')}
+
+
+def textures(data):
+    """Every texture in a BNTX file: [(name, BRTI offset)]."""
+    out, i = [], data.find(b'BRTI')
+    while i >= 0:
+        name_at = struct.unpack_from('<Q', data, i + 0x60)[0]
+        n = struct.unpack_from('<H', data, name_at)[0]
+        out.append((data[name_at + 2:name_at + 2 + n].decode('utf-8', 'replace'), i))
+        i = data.find(b'BRTI', i + 4)
+    return out
+
+
+def decode_texture(data, i):
+    """Decode the BRTI texture at offset i (first mip level) -> (width, height, BGRA bytes, kind)."""
     fmt = struct.unpack_from('<I', data, i + 0x1C)[0]
     width, height = struct.unpack_from('<II', data, i + 0x24)
     layout = struct.unpack_from('<I', data, i + 0x34)[0]
@@ -48,13 +61,25 @@ def decode_bntx(data):
     ptrs = struct.unpack_from('<Q', data, i + 0x70)[0]
     mip0 = struct.unpack_from('<Q', data, ptrs)[0]
     kind = fmt >> 8
-    if kind not in ASTC_BLOCKS:
+    if kind in ASTC_BLOCKS:
+        bw, bh = ASTC_BLOCKS[kind]
+        bpp, decode = 16, lambda raw: texture2ddecoder.decode_astc(raw, width, height, bw, bh)
+    elif kind in BC_FORMATS:
+        bw = bh = 4
+        bpp, fn = BC_FORMATS[kind]
+        decode = lambda raw: getattr(texture2ddecoder, fn)(raw, width, height)
+    else:
         raise ValueError(f'unsupported texture format 0x{fmt:04x}')
-    bw, bh = ASTC_BLOCKS[kind]
-    wb, hb = _div_up(width, bw), _div_up(height, bh)
-    raw = deswizzle(data[mip0:mip0 + image_size], wb, hb, 16, layout & 7)
-    bgra = texture2ddecoder.decode_astc(raw, width, height, bw, bh)
-    # BGRA -> RGBA
+    raw = deswizzle(data[mip0:mip0 + image_size], _div_up(width, bw), _div_up(height, bh), bpp, layout & 7)
+    return width, height, decode(raw), kind
+
+
+def decode_bntx(data):
+    """First texture of a BNTX file -> (width, height, RGBA bytes)."""
+    i = data.find(b'BRTI')
+    if i < 0:
+        raise ValueError('no BRTI texture')
+    width, height, bgra, _ = decode_texture(data, i)
     rgba = bytearray(bgra)
     rgba[0::4], rgba[2::4] = bgra[2::4], bgra[0::4]
     return width, height, bytes(rgba)
