@@ -9,13 +9,11 @@ Where the project stands, what was learned along the way, and what's next. Updat
 | Latest release | [v1.5.2](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.5.2): smoother zooming with many markers; v1.5.x: open on your phone, lighter default legend, saved view settings, sky map fix |
 | Release exe | 24.5 MB, SHA-256 `be54f2646c48f8e9d274006366598ba84ffb67e6f761863234019014392aa430` |
 | Release check | downloaded exe, clean data folder: app window, setup 42 s, 147 frogs, 366 places, progress read, marker CSS without transition/filters; Quit exits |
-| Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
+| Tested on | TotK Recomp v0.3.13 with game 1.2.1, English (USen), saves on `F:`; game 1.4.3 tested by the owner on 2026-11-10 (works) |
 
 ### Next up
-1. Before posting on Reddit (r/decomps first):
-   - VirusTotal scan of the release exe, link in the release notes
-   - test the Browse… folder picker, a game folder outside `<drive>:\Games\TotK`, another Windows user,
-     game 1.4.3 saves, non-English game files
+1. Posted on r/decomps and the TotK Recomp Show and tell (2026-11-10). Still untested: the Browse… folder picker,
+   a game folder outside `<drive>:\Games\TotK`, another Windows user, non-English game files
 
 ## Done
 

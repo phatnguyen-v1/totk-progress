@@ -36,8 +36,8 @@ It only ever reads your game and save files; it never writes to them.
 
 ## Get started
 
-You need [TotK Recomp](https://github.com/valentderah/totk-pc-recomp) installed with your game files (tested with v0.3.13, game
-version 1.2.1). The app builds its map, collectibles and quests from those files.
+You need [TotK Recomp](https://github.com/valentderah/totk-pc-recomp) installed with your game files (tested with game
+versions 1.2.1 and 1.4.3). The app builds its map, collectibles and quests from those files.
 
 1. Download `TotKProgressMap.exe` from [Releases](../../releases/latest) and put it anywhere.
 2. Double-click it. The app window opens with the setup page (Windows may say the app is unrecognized:
