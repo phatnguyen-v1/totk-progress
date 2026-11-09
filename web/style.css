@@ -81,6 +81,7 @@ select, input[type=search] {
 .layers .find-link { border-left: 1px solid var(--line); border-radius: 0 999px 999px 0; }
 .mk.player img { transform: none; filter: drop-shadow(0 0 4px rgba(255, 214, 64, .9)); }
 .panel-toggle { display: none; }
+.panel-close, .panel-scrim { display: none; }
 
 /* markers */
 #map { --s: 1; }
@@ -209,6 +210,8 @@ body:not(.tab-quests) .view-quests, body.tab-quests .view-map { display: none !i
   body { display: block; }
   #panel { position: fixed; inset: 0 auto 0 0; width: min(320px, 88vw); transform: translateX(-100%); transition: transform .2s; }
   body.panel-open #panel { transform: none; }
+  .panel-close { display: inline-block; font-size: 24px; margin-left: 4px; }
+  body.panel-open .panel-scrim { display: block; position: fixed; inset: 0; z-index: 990; background: rgba(0,0,0,.45); }
   #main { position: fixed; inset: 0; }
   .panel-toggle { display: block; position: absolute; z-index: 950; top: 12px; left: 12px;
     background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }

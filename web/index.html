@@ -11,7 +11,7 @@
 <body>
 <aside id="panel">
   <header class="panel-head">
-    <div class="title-row"><h1>TotK Progress</h1><button id="open-settings" class="icon-btn" title="Settings" aria-label="Settings">⚙</button></div>
+    <div class="title-row"><h1>TotK Progress</h1><button id="open-settings" class="icon-btn" title="Settings" aria-label="Settings">⚙</button><button id="panel-close" class="icon-btn panel-close" title="Close" aria-label="Close panel">×</button></div>
     <div id="status" class="status">Loading…</div>
     <div class="tabs" id="tabs" role="tablist">
       <button data-tab="map" class="on" role="tab">Map</button>
@@ -83,6 +83,7 @@
     <button id="find-link" class="find-link" title="Where Link was when the game last saved" hidden><img src="/icons/player.svg" data-icon="player" alt="">Link</button>
   </nav>
   <button id="panel-toggle" class="panel-toggle" aria-label="Toggle panel">☰</button>
+  <div id="panel-scrim" class="panel-scrim"></div>
   <div id="map"></div>
 </main>
 

@@ -1,14 +1,15 @@
 'use strict';
 
 // key must match savefile.CATEGORIES; data = map_data.json key. `on`: shown the first time (showing all
-// ~2,000 markers at once is slow); the rest is a click away in the legend, or "Show all".
+// ~2,000 markers at once is slow); the rest is a click away in the legend, or "Show all". `phone`: the
+// even smaller first set on phones and tablets opening the map over the network.
 const CATS = [
   { key: 'hidden_korok', data: 'hidden_koroks', label: 'Korok seeds (hidden)', icon: 'korok_hidden', group: 'Koroks & shrines', size: 20 },
   { key: 'carry_korok', data: 'carry_koroks', label: 'Korok friends', icon: 'korok_carry', group: 'Koroks & shrines', size: 22 },
-  { key: 'shrine', data: 'shrines', label: 'Shrines', icon: 'shrine', group: 'Koroks & shrines', on: true },
-  { key: 'lightroot', data: 'lightroots', label: 'Lightroots', icon: 'lightroot', group: 'Koroks & shrines', on: true },
-  { key: 'cave', data: 'caves', label: 'Caves', icon: 'cave', group: 'Places', on: true },
-  { key: 'bubbul', data: 'bubbuls', label: 'Bubbul frogs', icon: 'bubbul', group: 'Places', on: true },
+  { key: 'shrine', data: 'shrines', label: 'Shrines', icon: 'shrine', group: 'Koroks & shrines', on: true, phone: true },
+  { key: 'lightroot', data: 'lightroots', label: 'Lightroots', icon: 'lightroot', group: 'Koroks & shrines', on: true, phone: true },
+  { key: 'cave', data: 'caves', label: 'Caves', icon: 'cave', group: 'Places', on: true, phone: true },
+  { key: 'bubbul', data: 'bubbuls', label: 'Bubbul frogs', icon: 'bubbul', group: 'Places', on: true, phone: true },
   { key: 'well', data: 'wells', label: 'Wells', icon: 'well', group: 'Places' },
   { key: 'chasm', data: 'chasms', label: 'Chasms', icon: 'chasm', group: 'Places' },
   { key: 'location', data: 'locations', label: 'Locations', icon: 'location', group: 'Places' },
@@ -41,14 +42,16 @@ const PREFS = REMOTE ? {} : (() => {
   } catch { return {}; }
 })();
 let prefsTimer = null, prefsPending = {};
+// A phone keeps its own settings in its browser, under their own names (never mixed with the PC's).
+const LS = REMOTE ? 'totkp.phone.' : 'totkp.';
 const store = {
   get(k, d) {
     if (k in PREFS) return PREFS[k];
-    try { const v = localStorage.getItem('totkp.' + k); return v == null ? d : JSON.parse(v); } catch { return d; }
+    try { const v = localStorage.getItem(LS + k); return v == null ? d : JSON.parse(v); } catch { return d; }
   },
   set(k, v) {
     PREFS[k] = v;
-    try { localStorage.setItem('totkp.' + k, JSON.stringify(v)); } catch {}
+    try { localStorage.setItem(LS + k, JSON.stringify(v)); } catch {}
     if (REMOTE) return;   // a phone keeps its own view settings
     prefsPending[k] = v;
     clearTimeout(prefsTimer);
@@ -76,7 +79,7 @@ const state = {
   slot: store.get('slot', 'latest'),
   layer: store.get('layer', 'surface'),
   mode: store.get('mode', 'missing'),
-  off: new Set(store.get('off', CATS.filter(c => !c.on).map(c => c.key))),
+  off: new Set(store.get('off', CATS.filter(c => !(REMOTE ? c.phone : c.on)).map(c => c.key))),
   search: '',
   lastMtime: null,
   tab: store.get('tab', 'map'),
@@ -525,6 +528,11 @@ $('#qstarts').onchange = e => { state.qstarts = e.target.checked; store.set('qst
 $('#all-on').onclick = () => { state.off.clear(); store.set('off', []); renderLegend(); render(); };
 $('#all-off').onclick = () => { CATS.forEach(c => state.off.add(c.key)); store.set('off', [...state.off]); renderLegend(); render(); };
 $('#panel-toggle').onclick = () => document.body.classList.toggle('panel-open');
+// On small screens the open panel covers the ☰ button: close with ×, by tapping the map beside it, or Esc.
+const closePanel = () => document.body.classList.remove('panel-open');
+$('#panel-close').onclick = closePanel;
+$('#panel-scrim').onclick = closePanel;
+addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 
 // ---------- setup / settings ----------
 async function post(url, body) {

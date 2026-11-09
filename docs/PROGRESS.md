@@ -6,9 +6,9 @@ Where the project stands, what was learned along the way, and what's next. Updat
 
 | | |
 |---|---|
-| Latest release | [v1.5.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.5.0): open on your phone (QR, read-only), lighter default legend, saved view settings, sky map fix |
-| Release exe | 24.5 MB, SHA-256 `35023a420085a39832ffbe0d1819bc4be750c173ef336a7b1015908adea8fdfa` |
-| Release check | downloaded exe, clean data folder: app window, setup 42 s, tiles v2, 147 frogs, 366 places, prefs saved; phone view on: page and progress served on the LAN address, remote quit 403; Quit exits |
+| Latest release | [v1.5.1](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.5.1): phone fixes (own first-time legend, close button for the side panel); v1.5.0: open on your phone, lighter default legend, saved view settings, sky map fix |
+| Release exe | (filled in after the build) |
+| Release check | (pending) |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
@@ -119,6 +119,14 @@ Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (
 `timg/__Combined.bntx` (1,231 textures). Texture name at `BRTI+0x60` (pointer to u16 length + text).
 Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
 plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
+
+## v1.5.1 (released 2026-11-09): phone fixes
+
+- Phones start with their own, smaller legend (shrines, lightroots, caves, Bubbul frogs: `CATS[].phone`)
+  and keep their settings under `totkp.phone.*` in their browser, so an older stored setting in that
+  browser can't carry over.
+- Small screens: the open side panel covered the ☰ button, so it couldn't be closed. Now a × in the
+  panel header, a dimmed strip over the map that closes it on tap, and Esc.
 
 ## v1.5.0 (released 2026-11-09)
 
