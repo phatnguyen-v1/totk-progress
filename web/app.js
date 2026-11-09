@@ -355,15 +355,18 @@ async function loadProgress() {
 }
 
 async function poll() {
+  let again = true;
   try {
     const s = await loadSlots();
     const slotNo = state.slot === 'latest' ? s.latest : Number(state.slot);
     const info = s.slots.find(x => x.slot === slotNo);
     if (info && (info.mtime !== state.lastMtime || !state.progress || state.progress.slot !== slotNo)) await loadProgress();
   } catch (e) {
-    setStatus('Cannot read save: ' + e.message, 'err');
+    if (e instanceof TypeError) setStatus('The app is not running. Open TotKProgressMap again, then refresh this page.', 'err');
+    else if (/setup required/.test(e.message)) { again = false; setStatus('Setup needed'); openSetup(true); }
+    else setStatus('Cannot read save: ' + e.message, 'err');
   } finally {
-    setTimeout(poll, POLL_MS);
+    if (again) setTimeout(poll, POLL_MS);
   }
 }
 
