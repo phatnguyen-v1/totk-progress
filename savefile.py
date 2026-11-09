@@ -3,7 +3,7 @@
 The save starts with a table of (u32 hash, u32 value) pairs from offset 0x28. It ends at the
 MetaData.SaveTypeHash entry, whose value is the offset of a u64 GUID array (ends with 0).
 Most objects are matched by their completion hash in the table; Sage's Wills and Addison's
-signposts are matched by GUID instead. Same approach as lud99/totk-unexplored.
+signposts are matched by GUID instead.
 """
 import struct
 from pathlib import Path

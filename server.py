@@ -25,6 +25,20 @@ import savefile
 from paths import APP_NAME, ASSETS, CONFIG, DATA, FROZEN, LOG, VERSION, WEB
 
 APP_ID = 'totk-progress-map'
+# Bump when build_mapdata's output changes: existing installs then rebuild the map data (not the tiles).
+DATA_VERSION = 4
+
+
+def have_assets():
+    """Map tiles and map data built from the game files."""
+    return (ASSETS / 'tiles' / 'meta.json').is_file() and (ASSETS / 'map_data.json').is_file()
+
+
+def built_version():
+    try:
+        return json.loads((ASSETS / 'source.json').read_text(encoding='utf-8')).get('data_version', 1)
+    except (OSError, ValueError):
+        return None
 
 
 class Ui:
@@ -93,13 +107,14 @@ def inspect(path):
     if save_dir:
         info['save_dir'] = str(save_dir)
         info['slots'] = sum(1 for _ in save_dir.glob('slot_0*/progress.sav'))
-    if root and not info['game']:
-        info['notes'].append('Game files (romfs) not found here, so the Quests tab will be off.')
     if not root and not save_dir:
         info['notes'].append("This doesn't look like a TotK Recomp folder: no totk.exe, romfs or profile\\save inside.")
+    elif not info['game']:
+        info['notes'].append("No game files (romfs) here. The map, the collectibles and the quests are built from "
+                             "TotK Recomp's game files, so pick the TotK Recomp folder (the one with totk.exe).")
     elif not save_dir:
         info['notes'].append("No saves yet. Play until the game saves once, and the map will pick it up.")
-    info['ok'] = bool(root or save_dir)
+    info['ok'] = bool(info['game'])
     info['exe'] = bool(root and (root / 'totk.exe').is_file())
     return info
 
@@ -172,15 +187,13 @@ class State:
             self.cache.clear()
 
     def ready(self):
-        import fetch_assets
-        return bool(self.save_dir) and self.map_data is not None and fetch_assets.have_assets()
+        return bool(self.save_dir) and self.map_data is not None and have_assets()
 
     def setup_status(self, with_candidates=False):
-        import fetch_assets
         st = {
             'version': VERSION, 'ready': self.ready(), 'install': self.install,
             'save_override': self.save_override, 'data_dir': str(DATA),
-            'assets': {'map': fetch_assets.have_assets(), 'quests': self.quests is not None},
+            'assets': {'map': have_assets(), 'quests': self.quests is not None},
             'job': dict(self.job),
         }
         if with_candidates:
@@ -200,10 +213,10 @@ class State:
         return info
 
     def needs_game_build(self):
-        """True when game files are available but the map wasn't built from them yet (e.g. after an update)."""
-        import fetch_assets
+        """True when game files are available but the map or its data is missing or from an older version
+        (e.g. after an update). The rebuild skips the map tiles when they're already there."""
         return bool(self.install and self.install.get('game')) and not (
-            fetch_assets.have_game_tiles() and (ASSETS / 'source.json').is_file())
+            have_assets() and built_version() == DATA_VERSION)
 
     def build_icons(self, romfs=None):
         """Map icons from the game files (a second or so). The app's own icons are used when this fails."""
@@ -233,7 +246,6 @@ class State:
             threading.Thread(target=self._setup_job, args=(self.install,), daemon=True).start()
 
     def _setup_job(self, info):
-        import fetch_assets
         job = self.job
 
         def stage(lo, hi):
@@ -243,42 +255,32 @@ class State:
             return prog
 
         try:
-            if info.get('game'):
-                romfs = Path(info['path']) / 'romfs'
-                import gamefiles
-                import maptiles
-                import build_mapdata
-                rf = gamefiles.Romfs(romfs)
+            if not info.get('game'):
+                raise RuntimeError('No TotK Recomp game files (romfs) in this folder.')
+            romfs = Path(info['path']) / 'romfs'
+            import gamefiles
+            import maptiles
+            import build_mapdata
+            rf = gamefiles.Romfs(romfs)
+            keep_tiles = job.get('upgrade') and (ASSETS / 'tiles' / 'meta.json').is_file()
+            if not keep_tiles:
                 stage(0, 0.6)(0, 'Drawing the map from your game files…')
                 maptiles.build_tiles(rf, ASSETS / 'tiles', progress=stage(0, 0.6))
-                self.build_icons(rf)
-                stage(0.6, 0.75)(0, 'Finding shrines, Koroks and everything else in your game files…')
-                build_mapdata.build(romfs, ASSETS / 'map_data.json', log=lambda m: stage(0.6, 0.75)(0.5, m[:80]))
-                stage(0.75, 0.8)(0, 'Adding Korok puzzle details…')
-                ref = fetch_assets.fetch_reference()
-                if ref:
-                    data = json.loads((ASSETS / 'map_data.json').read_text(encoding='utf-8'))
-                    build_mapdata.merge_reference(data, ref)
-                    build_mapdata.write(data, ASSETS / 'map_data.json')
-                else:
-                    job['warning'] = 'Korok puzzle details were skipped (no internet). Everything else is ready.'
-                (ASSETS / 'source.json').write_text(json.dumps({'map': 'game', 'korok_details': bool(ref),
-                                                                'built': time.time()}))
-                import shutil
-                for old in ('map', 'icons'):  # downloaded map images and icons from older versions
-                    shutil.rmtree(ASSETS / old, ignore_errors=True)
-                stage(0.8, 1)(0, 'Reading the quest list from your game files…')
-                try:
-                    import build_quests
-                    build_quests.build(romfs, ASSETS / 'quests.json', log=lambda m: None)
-                except Exception as e:  # the map still works without quests
-                    traceback.print_exc()
-                    job['warning'] = f'Quest list not built: {e}'
-            elif not fetch_assets.have_assets():
-                try:
-                    fetch_assets.fetch_all(ASSETS, 'medium', stage(0, 1))
-                except OSError as e:
-                    raise RuntimeError(f"Couldn't download the map data ({e}). Check your internet connection and try again.")
+            self.build_icons(rf)
+            stage(0.6, 0.8)(0, 'Finding shrines, Koroks and everything else in your game files…')
+            build_mapdata.build(romfs, ASSETS / 'map_data.json', log=lambda m: stage(0.6, 0.8)(0.5, m[:80]))
+            (ASSETS / 'source.json').write_text(json.dumps({'map': 'game', 'data_version': DATA_VERSION,
+                                                            'built': time.time()}))
+            import shutil
+            for old in ('map', 'icons'):  # map images and icons downloaded by versions before 1.2
+                shutil.rmtree(ASSETS / old, ignore_errors=True)
+            stage(0.8, 1)(0, 'Reading the quest list from your game files…')
+            try:
+                import build_quests
+                build_quests.build(romfs, ASSETS / 'quests.json', log=lambda m: None)
+            except Exception as e:  # the map still works without quests
+                traceback.print_exc()
+                job['warning'] = f'Quest list not built: {e}'
             job['progress'], job['message'] = 1.0, 'Done'
             self.reload()
             job['done'] = True

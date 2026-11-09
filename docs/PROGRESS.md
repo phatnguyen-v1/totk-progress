@@ -6,9 +6,9 @@ Where the project stands, what was learned along the way, and what's next. Updat
 
 | | |
 |---|---|
-| Latest release | [v1.3.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.3.0): own app window, Link's last saved position, app icon |
-| Release exe | 24.4 MB, SHA-256 `2b4c7ababa708c452c2d31cd0109a188ae90cf057f13a7d71fce3abd9b527ac3` |
-| Release check | downloaded exe, clean data folder: app window opens, setup 45 s, no errors, 23 game icons, Link's position, 7 Korok seeds / 4 shrines / 253 quests; second launch hands over, Quit exits |
+| Latest release | [v1.4.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.4.0): everything from the game files (no downloads), 147 Bubbul frogs, 366 places, map tiles fix |
+| Release exe | (filled in after the build) |
+| Release check | (pending) |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
@@ -18,7 +18,6 @@ Where the project stands, what was learned along the way, and what's next. Updat
    - test the Browse… folder picker, a game folder outside `<drive>:\Games\TotK`, another Windows user,
      game 1.4.3 saves, non-English game files
    - release text with an FAQ (SmartScreen warning, read-only, what "Queued" means)
-2. Courtesy note to lud99 (their `map_data.json` is still used for Korok puzzle details).
 
 ## Done
 
@@ -28,7 +27,7 @@ Where the project stands, what was learned along the way, and what's next. Updat
   friends need `Clear`, lightroots `Open`); Sage's Wills and Addison's signs are done when their GUID is listed.
 - Leaflet map with sky / surface / depths layers, filters (missing / done / all), search, Korok paths,
   live refresh every 4 s from the newest save slot.
-- Map data and icons downloaded from lud99/totk-unexplored by `fetch_assets.py`.
+- Map data and icons came from a third-party download (replaced by game files in v1.2, removed in v1.4).
 
 ### v1.0: quests (2026-11-09)
 - 253 adventure-log quests from the game's `RSDB/Challenge` table + `Mals/<lang>` messages, read from the
@@ -59,8 +58,8 @@ Goal: no third-party download for TotK Recomp users; the repo ships no game-deri
 | 2. Own icon set (SVG, `tools/make_icons.py`) | done: 23 icons |
 | 3. Shrines, lightroots, caves, wells, chasms, places from the game's indexes | done |
 | 4. Korok seeds, bosses, old maps, schematics, Sage's Wills, Addison's signs | done |
-| 5. Check against lud99's data and real saves | done: every save flag matches (see below) |
-| 6. Setup builds everything locally; lud99 only for Korok puzzle details / fallback | done |
+| 5. Check against third-party data and real saves | done: every save flag matches (see below) |
+| 6. Setup builds everything locally | done (third-party Korok details and fallback map removed in v1.4) |
 | 7. Tests, rebuild exe, docs, release | done: v1.2.0 released and checked |
 
 Clean first run of the exe: 42 s, 14.2 MB data, same progress as before (7 Korok seeds, 4 shrines on
@@ -100,12 +99,8 @@ Save flags are murmur3 of a name; per-object ones use the 64-bit placement insta
 Placement read from `Banc/{MainField,MinusField}/<A-J>-<1-8>_{Static,Dynamic}`, `Sky/`, `Cave/`,
 `DeepHole/`, `LargeDungeon/`, `Castle/` (946 files, ~554k actors, ~7 s). Not from `Merged/`.
 
-Compared with lud99's data by save flag: identical for all categories; places 333 of 360 (the rest are
-Bargainer Statues, Great Fairies, forge constructs etc. without an index), Bubbul frogs 146 of 147.
-
-Taken from lud99's `map_data.json` when online (`merge_reference`, matched by flag): Korok puzzle
-types and routes (all 900), and those ~27 extra places / 1 Bubbul frog. Offline, Koroks show as
-"Flying Korok" / "Hidden Korok" without routes.
+Compared with third-party data by save flag: identical for all categories; places 347 (the ones missing
+are Bargainer Statues, Great Fairies, forge constructs etc. without an index), Bubbul frogs 146 of 147.
 
 Bonus for later: `Drop__DropActor` gives the contents of all 1,341 field chests.
 
@@ -126,6 +121,50 @@ Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (
 `timg/__Combined.bntx` (1,231 textures). Texture name at `BRTI+0x60` (pointer to u16 length + text).
 Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
 plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
+
+## v1.4.0 (released 2026-11-09)
+
+### Settings dialog
+
+- ⚙ *Save* with the same, already set up folder now just closes (it used to rerun the whole setup).
+  The dialog is titled *Settings* when opened from ⚙.
+- An icon style option (game icons / the app's own) was tried and removed: extracting the game icons
+  takes ~0.5 s of a ~45 s setup, so it saved nothing. The app's SVGs are only a fallback.
+
+### Everything from the game files, no downloads
+
+- Removed all third-party data: `fetch_assets.py` (fallback map download and the Korok puzzle details
+  merge) is gone; setup needs TotK Recomp's game files (folders with only saves are refused with a
+  message).
+- Places with no LocationArea entry come from map labels: `LocationMarker` actors (`Dynamic.Location`)
+  with an `IsVisitLocation.<name>` flag: 7 Bargainer Statues, 11 Forge Constructs, the Smithing
+  Construct (`MARKER_PLACES`). 366 places now. 637 more labels have visit flags (lakes, hills, beaches,
+  ...): candidates for an optional "landmarks" layer (field labels have y = 0, so sky/depths need care).
+- Bubbul frogs: 146 from `CaveMarkerInfo` (the cave's map marker) plus the frog in the Ancient Zora
+  Waterworks (`ZoraZonauTerminal`), which has no cave marker: taken from the `Enemy_CaveMaster_*` actor,
+  whose `Dynamic.LocationName` names its place (147 frogs, one per place). 147 now.
+- Checked with a 100% save (an edited one: it sets the Bubbul flag on every cave, well and chasm, so
+  it can't identify frogs by itself): every category reads complete except 1 Sage's Will and 1 old map,
+  which that save lacks; our counts (20, 31) match the game's totals and all entries are unique.
+- Addison's signs have no icon in the game; they keep the app's drawn icon.
+- Korok puzzle types from the game: the Korok actor's `Dynamic.HideType` (no HideType = under a lift
+  rock; 10 = acorn, "in a hole" when an `Obj_KorokPotFixedVine` is within 30 m). Names are this
+  project's own (`build_mapdata.HIDE_TYPES`).
+- Routes from the game: flower trails = `Obj_Plant_Korok_A_01` grouped (< 60 m apart), ordered from
+  `TrackingFlowerType` 1 by nearest neighbour, matched to the Korok by the last flower (type 2);
+  races = nearest `FldObj_KorokStartingBlock_A_01` to the Korok; landing targets = start block to nearest
+  `FldObj_KorokGoalBlock_A_02`; Korok friends = `KorokCarryPassenger_Pair` -> linked
+  `KorokCarry_Destination`. Checked against the old merged data: all 800 types, all 107 seed routes and
+  100 friend routes agree (flower order sometimes differs; ours walks the trail in order).
+- `server.DATA_VERSION` (4) in `source.json`: older installs rebuild the map data on start (tiles kept).
+
+### Map tiles fix
+
+- Parts of the map went black at some zoom levels (e.g. 1.25). The two tile layers switched with their
+  `minZoom`/`maxZoom`, which Leaflet checks against the *rounded* zoom, so with quarter-step zooms both
+  could be off. Now the 300 px layer always stays and the 840 px layer is added on top from zoom 1.25
+  (`DETAIL_ZOOM`, on `zoomend` and layer change). Checked: full coverage at every zoom -1.5..3, with the
+  mouse wheel and when switching layers zoomed in, at 1850 x 1000.
 
 ## v1.3.0 (released 2026-11-09): app window, Link's position, app icon
 
@@ -152,6 +191,5 @@ plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
 ## Ideas for later
 - "What changed since last save" feed, You-are-here (`PlayerStatus.SavePos`), nearest missing items.
 - Treasure chests with contents (chest `Drop__DropActor` + opened flags), Hyrule Compendium, armor upgrades.
-- Korok puzzle types/routes from the game itself (puzzle actors near each Korok) to drop the last lud99 use.
 - Emulator support: detect Ryujinx / yuzu-fork save folders, read quests from a dumped RomFS.
 - Phone as second screen (`--host 0.0.0.0`).

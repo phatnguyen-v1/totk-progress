@@ -67,20 +67,31 @@ const overlays = {};
 const GameTiles = L.TileLayer.extend({
   getTileUrl(c) { return `/assets/tiles/${this.options.layerName}/${this.options.lod}/${c.x}-${c.y - 1}.webp`; },
 });
+// The 840 px tiles are added on top from this zoom on. Switched here, not with the layers' minZoom/maxZoom:
+// Leaflet rounds the zoom before checking those, so with quarter-step zooms both layers could be off at
+// once (e.g. 1.25 rounds to 1) and the map went black in places. The 300 px layer always stays underneath,
+// so there's no gap while detailed tiles load.
+const DETAIL_ZOOM = 1.25;
 function gameTileLayer(name) {
-  const common = { layerName: name, tileSize: 125, minNativeZoom: 0, maxNativeZoom: 0, noWrap: true,
-    bounds: L.latLngBounds([[-1375, 0], [-125, 1500]]), keepBuffer: 4 };
-  return L.layerGroup([
-    new GameTiles('', { ...common, lod: '02', minZoom: -3, maxZoom: 1 }),
-    new GameTiles('', { ...common, lod: '01', minZoom: 1.25 }),
-  ]);
+  const common = { layerName: name, tileSize: 125, minNativeZoom: 0, maxNativeZoom: 0, minZoom: -10, maxZoom: 10,
+    noWrap: true, bounds: L.latLngBounds([[-1375, 0], [-125, 1500]]), keepBuffer: 4 };
+  const far = new GameTiles('', { ...common, lod: '02', zIndex: 1 });
+  const near = new GameTiles('', { ...common, lod: '01', zIndex: 2 });
+  const group = L.layerGroup([far]);
+  group.syncDetail = () => {
+    const want = map.getZoom() >= DETAIL_ZOOM;
+    if (want && !group.hasLayer(near)) group.addLayer(near);
+    else if (!want && group.hasLayer(near)) group.removeLayer(near);
+  };
+  return group;
 }
+map.on('zoomend', () => { const o = overlays[state.layer]; if (o && o.syncDetail) o.syncDetail(); });
 async function setupBaseMaps() {
   let meta = null;
   try { meta = await getJSON('/assets/tiles/meta.json'); } catch {}
-  for (const l of ['surface', 'sky', 'depths'])
-    overlays[l] = meta ? gameTileLayer(l) : L.imageOverlay(`/assets/map/${l}.png`, bounds);
-  state.mapSource = meta ? 'game' : 'download';
+  // tiles drawn from the player's game files at setup; without them the map stays blank but markers still work
+  for (const l of ['surface', 'sky', 'depths']) overlays[l] = gameTileLayer(l);
+  state.mapSource = meta ? 'game' : 'none';
   // Icons taken from the player's own game files (build_icons.py); the app's own SVGs otherwise.
   try {
     const m = await getJSON('/assets/gameicons/meta.json');
@@ -431,6 +442,7 @@ function setLayer(l) {
   state.layer = l; store.set('layer', l);
   for (const k in overlays) map.hasLayer(overlays[k]) && map.removeLayer(overlays[k]);
   overlays[l].addTo(map);
+  if (overlays[l].syncDetail) overlays[l].syncDetail();
   if (overlays[l].bringToBack) overlays[l].bringToBack();
   document.querySelectorAll('#layers button[data-layer]').forEach(b => b.classList.toggle('on', b.dataset.layer === l));
   render();
@@ -518,6 +530,7 @@ async function openSetup(firstRun) {
   $('#setup').hidden = false;
   $('#setup-close').hidden = firstRun;
   $('#setup-go').textContent = firstRun ? 'Set up' : 'Save';
+  $('#setup-title').textContent = firstRun ? 'Set up TotK Progress Map' : 'Settings';
   $('#setup-error').hidden = true;
   $('#job').hidden = true;
   $('#cands').innerHTML = '<div class="muted">Looking for your game…</div>';
@@ -526,6 +539,7 @@ async function openSetup(firstRun) {
     $('#data-dir').textContent = st.data_dir;
     $('#setup-foot').textContent = `Version ${st.version}` + (st.install ? ` · current folder: ${st.install.path}` : '');
     setup.candidates = st.candidates || [];
+    setup.current = st.ready && st.install ? st.install.path : null;
     selectFolder(st.install && st.install.ok ? st.install : (setup.candidates[0] || null));
     if (st.job.running) watchJob();
   } catch (e) {
@@ -571,6 +585,8 @@ function watchJob() {
 
 $('#setup-go').onclick = async () => {
   if (!setup.selected) return;
+  // Settings with the same, already set up folder: nothing to rebuild, just close.
+  if (!setup.firstRun && setup.current && setup.selected.path === setup.current) { $('#setup').hidden = true; return; }
   $('#setup-error').hidden = true;
   try {
     await post('/api/setup/apply', { path: setup.selected.path });

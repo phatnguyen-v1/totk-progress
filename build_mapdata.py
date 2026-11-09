@@ -4,7 +4,8 @@
 
 Everything comes from the game's own indexes and placement data:
 - Banc/<Field>/LocationArea: shrines, lightroots, caves (+ Bubbul frogs), wells, chasms, named places
-- Banc/MainField/HiddenKorok: Korok seeds and Korok friends (by instance ID)
+- Banc/MainField/HiddenKorok: Korok seeds and Korok friends (by instance ID); the puzzle type is the Korok
+  actor's HideType, routes come from the puzzle actors (flowers, race start blocks, Korok friends' pairs)
 - Banc/<Field>/<section>_Static|Dynamic, Sky, Cave, DeepHole: bosses, chests with Sage's Wills,
   old maps and Yiga schematics, Addison's signboards
 - RSDB/PouchActorInfo: which armor an old map leads to; Banc/MinusField/TreasureMap
@@ -34,9 +35,21 @@ SCHEMA_SITES = {
 }
 BOSSES = {'Giant': 'hinoxes', 'Golem': 'taluses', 'Sandworm': 'moldugas', 'Zonau': 'flux_constructs',
           'Mogurudo': 'froxes', 'Drake': 'gleeoks'}
-KOROK_TYPES = {'Npc_HiddenKorokFly': 'Flying Korok', 'Npc_HiddenKorokGround': 'Hidden Korok'}
+KOROK_ACTORS = ('Npc_HiddenKorokFly', 'Npc_HiddenKorokGround')
+# Korok puzzle by the Korok actor's Dynamic.HideType (no HideType: a Korok under a liftable rock).
+# 10 is both acorn puzzles: with a vine-held pot nearby it's the acorn in a hole.
+HIDE_TYPES = {
+    None: 'Lift the rock', 1: 'Glowing light', 2: 'Dive through the light', 3: 'Flower trail', 4: 'Race to the goal',
+    5: 'Moving light', 6: 'Complete the rock pattern', 7: 'Offering plate', 8: 'Pinwheel balloons',
+    9: 'Shoot the balloon', 10: 'Hanging acorn', 11: 'Land on the target', 12: 'Provide shelter',
+    13: 'Repair the roof', 15: 'Block puzzle', 17: 'Catch the light', 18: 'Touch the target', 19: 'Catch the seed',
+    20: 'Pull the plug', 23: 'Through the roof', 24: 'Boulder stand', 25: 'Ring the bell',
+}
 # LocationArea categories shown as named places (the ones discovered by visiting); shops, districts,
 # small spots and towers are left out.
+# Places that have no LocationArea entry but a map label (LocationMarker actor) and a visit flag:
+# Bargainer Statues, Forge Constructs and the Smithing Construct.
+MARKER_PLACES = re.compile(r'^(DemonStatue_\d+|SmallDemonStatue|SmeltShopGolem_\d+|ForgeShopGolem)$')
 PLACE_CATEGORIES = re.compile(r'^(City|DragonTears|Dungeon|SkyArchipelago|Stable|SpotBig.*|SpotMiddle\w+)$')
 
 
@@ -110,6 +123,7 @@ def build(romfs, out=OUT, lang='USen', log=print):
     log('Reading placement data…')
     rx = re.compile(r'Banc/(MainField|MinusField)/([A-J]-\d_(Static|Dynamic)|Sky/.*|Cave/.*|DeepHole/.*|LargeDungeon/.*|Castle/.*)\.bcett\.byml\.zs$')
     korok_kind, seen = {}, set()
+    flowers, start_blocks, landing_blocks, vine_pots, carry, markers, frogs = [], [], [], [], {}, {}, {}
     bool_flags = {x['Hash'] for x in (gamefiles.byml(rf.read(rf.find('GameData/GameDataList.Product.', '.byml.zs')[-1]))['Data'].get('Bool') or [])}
     treasure_maps = {}
     pouch = gamefiles.byml(rf.read(rf.find('RSDB/PouchActorInfo.', '.byml.zs')[-1]))
@@ -123,8 +137,24 @@ def build(romfs, out=OUT, lang='USen', log=print):
             g, h, t = a.get('Gyaml') or '', a.get('Hash'), a.get('Translate')
             if not h or not t or h in seen:
                 continue
-            if g in KOROK_TYPES:
-                korok_kind[h] = g
+            if g in KOROK_ACTORS:
+                korok_kind[h] = (g, (a.get('Dynamic') or {}).get('HideType'))
+            elif g == 'Obj_Plant_Korok_A_01':
+                flowers.append((t, (a.get('Dynamic') or {}).get('TrackingFlowerType')))
+            elif g.startswith('Enemy_CaveMaster'):   # Bubbul frog; LocationName = its cave
+                frogs.setdefault((a.get('Dynamic') or {}).get('LocationName', ''), t)
+            elif g == 'LocationMarker':
+                loc = (a.get('Dynamic') or {}).get('Location', '')
+                if MARKER_PLACES.match(loc):
+                    markers.setdefault(loc, t)
+            elif g == 'FldObj_KorokStartingBlock_A_01':
+                start_blocks.append(t)
+            elif g == 'FldObj_KorokGoalBlock_A_02':
+                landing_blocks.append(t)
+            elif g == 'Obj_KorokPotFixedVine_A_01':
+                vine_pots.append(t)
+            elif g in ('KorokCarry_Destination', 'KorokCarryPassenger_Pair'):
+                carry[h] = (g, t, [l.get('Dst') for l in a.get('Links') or []])
             if g.startswith('Enemy_'):
                 kind = g.split('_')[1]
                 if kind in BOSSES and mmh3(f'IsDefeatBossEnemy.{h}') in bool_flags:
@@ -147,13 +177,43 @@ def build(romfs, out=OUT, lang='USen', log=print):
                     data['yiga_schematics'].append({'completion_hash': mmh3(f'ReadyMadeAutoBuilderDraft.{drop}.IsOwned'),
                                                     'display_name': drafts.get(f'{drop}_Name', drop), 'position': pos(t)})
 
+    trails = flower_trails(flowers)
+    pairs = carry_routes(carry)
     for iid, t in (hk.get('HiddenKorok') or {}).items():
-        kind = korok_kind.get(int(iid), '')
-        data['hidden_koroks'].append({'completion_hash': mmh3(f'IsAppearKorok.{iid}'), 'position': pos(t),
-                                      'type': KOROK_TYPES.get(kind, 'Korok seed'), 'internalHash': hex(int(iid))})
-    for iid, t in (hk.get('CarryKorok') or {}).items():
-        data['carry_koroks'].append({'completion_hash': mmh3(f'KorokCarryProgress.{iid}'), 'position': pos(t),
-                                     'type': 'Korok Friends', 'internalHash': hex(int(iid))})
+        _, hide = korok_kind.get(int(iid), ('', None))
+        o = {'completion_hash': mmh3(f'IsAppearKorok.{iid}'), 'position': pos(t),
+             'type': HIDE_TYPES.get(hide, 'Korok seed'), 'internalHash': hex(int(iid))}
+        if hide == 10 and _nearest(vine_pots, t, 30):
+            o['type'] = 'Acorn in a hole'
+        elif hide == 3 and trails:   # the trail whose last flower is next to the Korok
+            trail = min(trails, key=lambda tr: _dist(tr[-1], t))
+            o['path'] = {'flowers': [{'position': pos(f)} for f in trail]}
+        elif hide == 4 and start_blocks:   # race: from the start block to the goal ring at the Korok
+            o['path'] = {'start': pos(_nearest(start_blocks, t)), 'end': pos(t)}
+        elif hide == 11 and start_blocks and landing_blocks:   # glide from the start block onto the target
+            o['path'] = {'start': pos(_nearest(start_blocks, t)), 'end': pos(_nearest(landing_blocks, t))}
+        data['hidden_koroks'].append(o)
+    for iid, t in (hk.get('CarryKorok') or {}).items():   # t = where the pair has to be taken
+        o = {'completion_hash': mmh3(f'KorokCarryProgress.{iid}'), 'position': pos(t),
+             'type': 'Korok friends', 'internalHash': hex(int(iid))}
+        start = min(pairs, key=lambda p: _dist(p[1], t)) if pairs else None
+        if start and _dist(start[1], t) < 5:
+            o['path'] = {'start': pos(start[0]), 'end': pos(t)}
+        data['carry_koroks'].append(o)
+
+    # Bubbul frogs in places without a cave map marker (the Ancient Zora Waterworks): at the frog itself
+    known = {o['internal_name'] for o in data['bubbuls']}
+    for loc, t in sorted(frogs.items()):
+        flag = mmh3(f'IsGetCaveMasterMedal.{loc}')
+        if loc and loc not in known and flag in bool_flags:
+            data['bubbuls'].append({'internal_name': loc, 'display_name': names.get(loc, loc),
+                                    'completion_hash': flag, 'position': pos(t)})
+
+    shown = {o['completion_hash'] for o in data['locations']}
+    for loc, t in sorted(markers.items()):
+        flag = mmh3(f'IsVisitLocation.{loc}')
+        if flag in bool_flags and flag not in shown:
+            data['locations'].append({'display_name': names.get(loc, loc), 'completion_hash': flag, 'position': pos(t)})
 
     for draft, site in SCHEMA_SITES.items():
         if site in places:
@@ -174,27 +234,59 @@ def write(data, out):
     tmp.replace(out)
 
 
-def merge_reference(data, ref):
-    """Add what the game files don't spell out from lud99/totk-unexplored's map_data.json:
-    Korok puzzle types and routes, and the few map features without an index (Bargainer Statues,
-    Great Fairies, forge constructs, ...). Matched by save flag. Returns how many entries were enriched."""
-    n = 0
-    for key in ('hidden_koroks', 'carry_koroks'):
-        by_flag = {o['completion_hash']: o for o in ref.get(key, [])}
-        for o in data.get(key, []):
-            r = by_flag.get(o['completion_hash'])
-            if r:
-                o['type'] = r.get('type', o.get('type'))
-                if r.get('path'):
-                    o['path'] = r['path']
-                n += 1
-    for key in ('locations', 'bubbuls'):
-        have = {o['completion_hash'] for o in data.get(key, [])}
-        for r in ref.get(key, []):
-            if r['completion_hash'] not in have:
-                data[key].append(r)
-                n += 1
-    return n
+def _dist(a, b):
+    return sum((a[i] - b[i]) ** 2 for i in range(3)) ** 0.5
+
+
+def _nearest(points, t, within=None):
+    best = min(points, key=lambda p: _dist(p, t), default=None)
+    return best if best is not None and (within is None or _dist(best, t) <= within) else None
+
+
+def flower_trails(flowers, link=60):
+    """Group the Korok trail flowers into trails (flowers closer than `link` to each other) and order each
+    from its first flower (TrackingFlowerType 1) to the next nearest, ending at the last (type 2)."""
+    n = len(flowers)
+    parent = list(range(n))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    for i in range(n):
+        for j in range(i + 1, n):
+            if _dist(flowers[i][0], flowers[j][0]) < link:
+                parent[find(i)] = find(j)
+    groups = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(i)
+    trails = []
+    for idx in groups.values():
+        first = [i for i in idx if flowers[i][1] == 1]
+        cur = first[0] if first else idx[0]
+        order, rest = [cur], set(idx) - {cur}
+        while rest:
+            cur = min(rest, key=lambda i: _dist(flowers[i][0], flowers[cur][0]))
+            order.append(cur)
+            rest.remove(cur)
+        trails.append([flowers[i][0] for i in order])
+    return trails
+
+
+def carry_routes(carry):
+    """[(start, destination)] for Korok friends: KorokCarryPassenger_Pair (where they wait) links to its
+    KorokCarry_Destination (where the partner is)."""
+    out = []
+    for g, t, links in carry.values():
+        if g != 'KorokCarryPassenger_Pair':
+            continue
+        for d in links:
+            dest = carry.get(d)
+            if dest and dest[0] == 'KorokCarry_Destination':
+                out.append((t, dest[1]))
+                break
+    return out
 
 
 def main():

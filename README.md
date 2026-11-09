@@ -56,12 +56,10 @@ Running from source keeps data next to the code (`assets/`, `config.json`). `bui
 `dist\TotKProgressMap.exe` with PyInstaller; pushing a `v*` tag builds it on GitHub Actions and
 attaches it to a release.
 
-Command-line tools: `python build_mapdata.py --romfs <install>
-omfs` extracts the map data,
-`python -c "import gamefiles, maptiles; maptiles.build_tiles(gamefiles.Romfs(r'<install>
-omfs'), 'assets/tiles')"`
-draws the map tiles, `python fetch_assets.py [--small]` downloads the fallback map from lud99 (`--small` = 1500 px
-maps), `python build_quests.py [--romfs DIR] [--lang EUen]` rebuilds the quest list (other
+Command-line tools: `python build_mapdata.py --romfs <install>\romfs` extracts the map data,
+`python -c "import gamefiles, maptiles; maptiles.build_tiles(gamefiles.Romfs(r'<install>\romfs'), 'assets/tiles')"`
+draws the map tiles, `python build_icons.py --romfs <install>\romfs` the map icons,
+`python build_quests.py [--romfs DIR] [--lang EUen]` rebuilds the quest list (other
 languages: `EUen`, `EUfr`, `EUde`, `JPja`, ...). `server.py` options: `--save-dir <folder>` (read
 saves from there instead of the configured install), `--port 8787`, `--host 127.0.0.1`, `--browser` (use the browser instead of the app window),
 `--no-browser` (no window or browser, just the local server).
@@ -91,10 +89,9 @@ The map page loads Leaflet from cdnjs, so the browser needs internet.
 The map, the collectibles and the quests are read from your own TotK Recomp game files on your PC
 (`maptiles.py`, `build_mapdata.py`, `build_quests.py`, `build_icons.py`); see [docs/PROGRESS.md](docs/PROGRESS.md)
 for the formats and save flags. The map icons are the game's own map, item and compendium icons, also
-taken from your files; the app's own SVG icons (`web/icons/`) are used when they're not available. The save-reading approach comes from
-[lud99/totk-unexplored](https://github.com/lud99/totk-unexplored) (Switch homebrew); its `map_data.json`
-is still used for Korok puzzle types and routes, and its map images as a fallback when no game files
-are available (e.g. emulator saves). Nothing game-derived is shipped in this repository.
+taken from your files; the app's own SVG icons (`web/icons/`) are used when they're not available.
+Korok puzzle types and routes come from the game's placement data too. Nothing is downloaded, and
+nothing game-derived is shipped in this repository, so the app needs TotK Recomp's game files.
 
 ## License
 
