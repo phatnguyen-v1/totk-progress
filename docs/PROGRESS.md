@@ -6,9 +6,9 @@ Where the project stands, what was learned along the way, and what's next. Updat
 
 | | |
 |---|---|
-| Latest release | [v1.4.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.4.0): everything from the game files (no downloads), 147 Bubbul frogs, 366 places, map tiles fix |
-| Release exe | 24.4 MB, SHA-256 `4e0924e3ca87fc69cbc525e034bc9e79c7b9759389f33ed85cd45090cd7bce63` |
-| Release check | downloaded exe, clean data folder: app window, saves-only folder refused, setup 42 s, no errors, no downloads; 147 Bubbul frogs, 366 places, 107 + 100 Korok routes, 23 game icons; progress, 253 quests and Link's position read; Quit exits |
+| Latest release | [v1.5.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.5.0): open on your phone (QR, read-only), lighter default legend, saved view settings, sky map fix |
+| Release exe | (filled in after the build) |
+| Release check | (pending) |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
@@ -120,7 +120,31 @@ Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (
 Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
 plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
 
-## Unreleased
+## v1.5.0 (released 2026-11-09)
+
+- Sky map: two tiles (5-6, 9-4) were brown squares. Their names have three suffix parts (`_T_A_A`), the
+  old pattern only understood two, so the picker fell back to `_T_A`: a transparent overlay (islands
+  only). `pick_variants` now reads any number of parts and prefers the most parts (complete tile), then
+  the most T, then A. `maptiles.TILES_VERSION` (2) in `tiles/meta.json`: older tiles are deleted and
+  redrawn on the next start (the resume-skip only applies within one version). Tile URLs carry
+  `?v=<built>` so browsers and the app window don't keep the cached old tiles (served with a 1-day cache).
+- Legend starts with 8 categories on (`CATS[].on`: shrines, lightroots, caves, Bubbul frogs, Sage's Wills,
+  old maps, schema stones, Yiga schematics; ~455 markers instead of ~2,000).
+- View settings (legend, filters, layer, tab, slot, quest options) are saved in `config.json` as `ui`
+  (`GET/POST /api/prefs`, read synchronously at page start; localStorage only as fallback), so they survive
+  restarts and port changes and are shared by the app window and the browser. Pending changes are sent
+  on `pagehide`.
+- *Open on your phone* (⚙): a second listener on the LAN address (`server.Lan`, same port, `lan_ip()` =
+  the default-route interface), handler with `remote=True`: GET only for the page, assets, data,
+  `/api/ping|setup|slots|progress|prefs` (setup without paths, slots without the save folder, prefs `{}`);
+  every POST 403. Page: `REMOTE` hides ⚙, keeps its own view settings. QR as inline SVG from `segno`
+  (BSD, pure Python). On/off saved as `lan` in `config.json`, restarted with the app. Phones: zoom buttons
+  hidden under 760 px (pinch zoom), so the panel button is reachable.
+- TotK Recomp ([valentderah/totk-pc-recomp](https://github.com/valentderah/totk-pc-recomp)) linked in the README (intro, requirements),
+  the setup screen and the release notes.
+- Floating phone button (bottom right, PC only) opens a popup with the same-network note, *Turn on* /
+  *Turn off*, the QR code and the address; a green dot on the button while it's on. Settings shows the
+  same (one `renderLan` for both).
 
 - `send_file` no longer compares `resolve()`d paths: started from a packaged app (e.g. the Claude desktop
   app) AppData is redirected to `AppData\Local\Packages\<app>\LocalCache`, `resolve()` returned that

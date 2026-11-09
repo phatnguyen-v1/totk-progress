@@ -34,6 +34,15 @@ def have_assets():
     return (ASSETS / 'tiles' / 'meta.json').is_file() and (ASSETS / 'map_data.json').is_file()
 
 
+def tiles_current():
+    """Map tiles drawn by the current tile code (older ones get redrawn)."""
+    import maptiles
+    try:
+        return json.loads((ASSETS / 'tiles' / 'meta.json').read_text(encoding='utf-8')).get('version') == maptiles.TILES_VERSION
+    except (OSError, ValueError):
+        return False
+
+
 def built_version():
     try:
         return json.loads((ASSETS / 'source.json').read_text(encoding='utf-8')).get('data_version', 1)
@@ -216,7 +225,7 @@ class State:
         """True when game files are available but the map or its data is missing or from an older version
         (e.g. after an update). The rebuild skips the map tiles when they're already there."""
         return bool(self.install and self.install.get('game')) and not (
-            have_assets() and built_version() == DATA_VERSION)
+            have_assets() and built_version() == DATA_VERSION and tiles_current())
 
     def build_icons(self, romfs=None):
         """Map icons from the game files (a second or so). The app's own icons are used when this fails."""
@@ -227,6 +236,22 @@ class State:
             build_icons.build(rf, ASSETS / 'gameicons', log=print)
         except Exception:
             traceback.print_exc()
+
+    UI_PREFS = {'off', 'mode', 'layer', 'tab', 'slot', 'qmode', 'qtargets', 'qstarts', 'qopen'}
+
+    def set_prefs(self, values):
+        """View settings of the page (legend, filters, layer, tab, ...), kept in config.json so they survive
+        restarts and are the same in the app window and the browser."""
+        if not isinstance(values, dict):
+            raise ValueError('prefs must be an object')
+        ui = dict(self.cfg.get('ui') or {})
+        ui.update({k: v for k, v in values.items() if k in self.UI_PREFS})
+        if len(json.dumps(ui)) > 20000:
+            raise ValueError('prefs too large')
+        with self.lock:
+            self.cfg['ui'] = ui
+            save_config(self.cfg)
+        return ui
 
     def needs_icons(self):
         """Game files available but no icons yet, or icons from an older icon set."""
@@ -262,7 +287,7 @@ class State:
             import maptiles
             import build_mapdata
             rf = gamefiles.Romfs(romfs)
-            keep_tiles = job.get('upgrade') and (ASSETS / 'tiles' / 'meta.json').is_file()
+            keep_tiles = job.get('upgrade') and tiles_current()
             if not keep_tiles:
                 stage(0, 0.6)(0, 'Drawing the map from your game files…')
                 maptiles.build_tiles(rf, ASSETS / 'tiles', progress=stage(0, 0.6))
@@ -361,7 +386,7 @@ def pick_folder(initial=None):
 
 # ---------------------------------------------------------------- HTTP
 
-def make_handler(state, server_ref):
+def make_handler(state, server_ref, remote=False):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass
@@ -401,14 +426,26 @@ def make_handler(state, server_ref):
             q = parse_qs(url.query)
             p = url.path
             try:
-                if p == '/api/ping':
-                    self.send_json({'app': APP_ID, 'version': VERSION, 'mode': Ui.mode})
+                if remote and not self.remote_get_allowed(p):
+                    self.send_json({'error': 'not available on other devices'}, 403)
+                elif remote and p == '/api/setup':   # what a phone needs, without folder paths
+                    self.send_json({'version': VERSION, 'ready': state.ready(), 'remote': True,
+                                    'job': {'running': state.job['running']}})
+                elif remote and p == '/api/prefs':   # a phone keeps its own view settings
+                    self.send_json({})
+                elif p == '/api/ping':
+                    self.send_json({'app': APP_ID, 'version': VERSION, 'mode': Ui.mode, 'remote': remote})
+                elif p == '/api/lan':
+                    self.send_json(Lan.status())
+                elif p == '/api/prefs':
+                    self.send_json(state.cfg.get('ui') or {})
                 elif p == '/api/setup':
                     self.send_json(state.setup_status(with_candidates=q.get('scan', ['0'])[0] == '1'))
                 elif p in ('/api/slots', '/api/progress') and not state.ready():
                     self.send_json({'error': 'setup required', 'setup': True}, 409)
                 elif p == '/api/slots':
-                    self.send_json({'save_dir': str(state.save_dir), 'latest': state.latest_slot(), 'slots': state.slots(),
+                    self.send_json({'save_dir': None if remote else str(state.save_dir), 'latest': state.latest_slot(),
+                                    'slots': state.slots(),
                                     'job': state.job})
                 elif p == '/api/progress':
                     slot = q.get('slot', [''])[0]
@@ -433,7 +470,16 @@ def make_handler(state, server_ref):
             except (ValueError, savefile.SaveError, OSError) as e:
                 self.send_json({'error': str(e)}, 500)
 
+        def remote_get_allowed(self, p):
+            """Phones and other devices on the network only read: the page, the map data and the progress."""
+            if p.startswith('/api/'):
+                return p in ('/api/ping', '/api/setup', '/api/slots', '/api/progress', '/api/prefs')
+            return True
+
         def do_POST(self):
+            if remote:   # other devices on the network can't change anything
+                self.send_json({'error': 'not available on other devices'}, 403)
+                return
             if self.headers.get(CSRF_HEADER) != '1':
                 self.send_json({'error': 'forbidden'}, 403)
                 return
@@ -457,6 +503,10 @@ def make_handler(state, server_ref):
                 elif p == '/api/quit':
                     self.send_json({'ok': True})
                     threading.Thread(target=lambda: (time.sleep(0.3), Ui.quit(server_ref[0])), daemon=True).start()
+                elif p == '/api/prefs':
+                    self.send_json({'ok': True, 'ui': state.set_prefs(body)})
+                elif p == '/api/lan':
+                    self.send_json(Lan.set_enabled(state, bool(body.get('enabled'))))
                 elif p == '/api/focus':
                     Ui.focus()
                     self.send_json({'ok': True, 'mode': Ui.mode})
@@ -474,6 +524,72 @@ def make_handler(state, server_ref):
 class Server(ThreadingHTTPServer):
     allow_reuse_address = False   # on Windows SO_REUSEADDR would let a second copy share the port
     daemon_threads = True
+
+
+def lan_ip():
+    """This PC's address on the local network (the one with the default route), or None."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('10.255.255.255', 1))   # UDP: picks the outgoing interface, sends nothing
+        ip = s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+    return None if ip.startswith('127.') or ip.startswith('169.254.') else ip
+
+
+class Lan:
+    """Optional, read-only copy of the page for phones and tablets on the same network (Settings ->
+    Open on your phone). A second listener on the LAN address with a handler that only allows reading."""
+    srv = None
+    url = None
+    port = None
+    error = None
+
+    @classmethod
+    def start(cls, state):
+        if cls.srv:
+            return
+        ip = lan_ip()
+        if not ip:
+            cls.error = 'No network connection found. Connect this PC to your Wi-Fi or network first.'
+            return
+        try:
+            ref = [None]
+            srv = Server((ip, cls.port), make_handler(state, ref, remote=True))
+            ref[0] = srv
+        except OSError as e:
+            cls.error = f'Could not open port {cls.port} on {ip}: {e}'
+            return
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        cls.srv, cls.url, cls.error = srv, f'http://{ip}:{cls.port}/', None
+        print(f'Also serving {cls.url} (read-only, local network)')
+
+    @classmethod
+    def stop(cls):
+        if cls.srv:
+            srv, cls.srv, cls.url = cls.srv, None, None
+            threading.Thread(target=lambda: (srv.shutdown(), srv.server_close()), daemon=True).start()
+
+    @classmethod
+    def set_enabled(cls, state, enabled):
+        cls.start(state) if enabled else cls.stop()
+        state.cfg['lan'] = bool(enabled and cls.srv)
+        save_config(state.cfg)
+        return cls.status()
+
+    @classmethod
+    def status(cls):
+        st = {'enabled': bool(cls.srv), 'url': cls.url, 'error': cls.error}
+        if cls.url:
+            try:
+                import segno
+                st['qr'] = segno.make(cls.url, error='m').svg_inline(scale=5, border=2, dark='#000', light='#fff')
+            except Exception:
+                traceback.print_exc()
+        return st
 
 
 def already_running(host, port):
@@ -526,6 +642,9 @@ def main():
     elif state.ready() and state.needs_icons():
         threading.Thread(target=state.build_icons, daemon=True).start()
     Ui.url = url
+    Lan.port = port
+    if state.cfg.get('lan') and args.host == '127.0.0.1':
+        Lan.start(state)
     print(f'Serving {url}', flush=True)
     if args.no_browser:
         serve(srv)

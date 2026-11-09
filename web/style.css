@@ -214,5 +214,35 @@ body:not(.tab-quests) .view-quests, body.tab-quests .view-map { display: none !i
     background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
   .layers { top: 56px; }
   .layers button { padding: 6px 10px; }
+  .leaflet-control-zoom { display: none; }   /* pinch to zoom; frees the corner for the panel button */
 }
 
+/* settings: open on your phone */
+.switch { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+.small { font-size: 12px; }
+.lan-box { display: flex; gap: 14px; align-items: center; margin-top: 8px; }
+.lan-qr svg { display: block; border-radius: 6px; }
+.lan-box code { display: inline-block; margin-top: 4px; font-size: 14px; user-select: all; }
+.icon-btn[hidden] { display: none; }
+
+/* floating "open on your phone" button + popup (bottom right of the map) */
+.share-btn { position: absolute; right: 18px; bottom: 18px; z-index: 900; width: 46px; height: 46px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  box-shadow: 0 4px 14px rgba(0,0,0,.45); cursor: pointer; }
+.share-btn:hover { border-color: var(--accent); color: var(--accent); }
+.share-btn.on { color: var(--accent); border-color: var(--accent); }
+.share-btn.on::after { content: ''; position: absolute; top: 7px; right: 7px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--done); box-shadow: 0 0 0 2px var(--panel); }
+.share-btn[hidden], .share-pop[hidden] { display: none; }
+.share-pop { position: absolute; right: 18px; bottom: 76px; z-index: 950; width: min(300px, calc(100vw - 36px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 8px; }
+.share-head { display: flex; justify-content: space-between; align-items: center; }
+.share-note { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border-left: 3px solid var(--gold);
+  font-size: 13px; line-height: 1.4; }
+.share-pop p { margin: 0; }
+.share-pop .lan-qr { align-self: center; }
+.share-pop code { font-size: 14px; user-select: all; }
+.share-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 2px; }
+.share-foot .btn { white-space: nowrap; flex: none; }

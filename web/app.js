@@ -1,35 +1,74 @@
 'use strict';
 
-// key must match savefile.CATEGORIES; data = map_data.json key
+// key must match savefile.CATEGORIES; data = map_data.json key. `on`: shown the first time (showing all
+// ~2,000 markers at once is slow); the rest is a click away in the legend, or "Show all".
 const CATS = [
   { key: 'hidden_korok', data: 'hidden_koroks', label: 'Korok seeds (hidden)', icon: 'korok_hidden', group: 'Koroks & shrines', size: 20 },
   { key: 'carry_korok', data: 'carry_koroks', label: 'Korok friends', icon: 'korok_carry', group: 'Koroks & shrines', size: 22 },
-  { key: 'shrine', data: 'shrines', label: 'Shrines', icon: 'shrine', group: 'Koroks & shrines' },
-  { key: 'lightroot', data: 'lightroots', label: 'Lightroots', icon: 'lightroot', group: 'Koroks & shrines' },
-  { key: 'cave', data: 'caves', label: 'Caves', icon: 'cave', group: 'Places' },
-  { key: 'bubbul', data: 'bubbuls', label: 'Bubbul frogs', icon: 'bubbul', group: 'Places' },
+  { key: 'shrine', data: 'shrines', label: 'Shrines', icon: 'shrine', group: 'Koroks & shrines', on: true },
+  { key: 'lightroot', data: 'lightroots', label: 'Lightroots', icon: 'lightroot', group: 'Koroks & shrines', on: true },
+  { key: 'cave', data: 'caves', label: 'Caves', icon: 'cave', group: 'Places', on: true },
+  { key: 'bubbul', data: 'bubbuls', label: 'Bubbul frogs', icon: 'bubbul', group: 'Places', on: true },
   { key: 'well', data: 'wells', label: 'Wells', icon: 'well', group: 'Places' },
   { key: 'chasm', data: 'chasms', label: 'Chasms', icon: 'chasm', group: 'Places' },
-  { key: 'location', data: 'locations', label: 'Locations', icon: 'location', group: 'Places', off: true },
+  { key: 'location', data: 'locations', label: 'Locations', icon: 'location', group: 'Places' },
   { key: 'hinox', data: 'hinoxes', label: 'Hinoxes', icon: 'hinox', group: 'Bosses' },
   { key: 'talus', data: 'taluses', label: 'Taluses', icon: 'talus', group: 'Bosses' },
   { key: 'molduga', data: 'moldugas', label: 'Moldugas', icon: 'molduga', group: 'Bosses' },
   { key: 'flux_construct', data: 'flux_constructs', label: 'Flux Constructs', icon: 'flux_construct', group: 'Bosses' },
   { key: 'frox', data: 'froxes', label: 'Froxes', icon: 'frox', group: 'Bosses' },
   { key: 'gleeok', data: 'gleeoks', label: 'Gleeoks', icon: 'gleeok', group: 'Bosses' },
-  { key: 'sages_will', data: 'sages_wills', label: "Sage's Wills", icon: 'sages_will', group: 'Collectibles' },
-  { key: 'old_map', data: 'old_maps', label: 'Old maps', icon: 'old_map', group: 'Collectibles' },
+  { key: 'sages_will', data: 'sages_wills', label: "Sage's Wills", icon: 'sages_will', group: 'Collectibles', on: true },
+  { key: 'old_map', data: 'old_maps', label: 'Old maps', icon: 'old_map', group: 'Collectibles', on: true },
   { key: 'addison_sign', data: 'addison_signposts', label: "Addison's signs", icon: 'addison_sign', group: 'Collectibles' },
-  { key: 'schema_stone', data: 'schema_stones', label: 'Schema stones', icon: 'schema_stone', group: 'Collectibles' },
-  { key: 'yiga_schematic', data: 'yiga_schematics', label: 'Yiga schematics', icon: 'yiga_schematic', group: 'Collectibles' },
+  { key: 'schema_stone', data: 'schema_stones', label: 'Schema stones', icon: 'schema_stone', group: 'Collectibles', on: true },
+  { key: 'yiga_schematic', data: 'yiga_schematics', label: 'Yiga schematics', icon: 'yiga_schematic', group: 'Collectibles', on: true },
 ];
 const SKY_Y = 750, DEPTHS_Y = -50, SIZE = 1500;
 const POLL_MS = 4000;
 
+// View settings (legend, filters, layer, tab, ...) are kept by the app in config.json (/api/prefs), so they
+// survive restarts and a port change, and are the same in the app window and the browser. Read once,
+// synchronously, before the page sets itself up; localStorage is only a fallback.
+// Opened from another device on the network (Settings -> Open on your phone): a read-only view.
+const REMOTE = !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+const PREFS = REMOTE ? {} : (() => {
+  try {
+    const x = new XMLHttpRequest();
+    x.open('GET', '/api/prefs', false);
+    x.send();
+    return x.status === 200 ? JSON.parse(x.responseText) || {} : {};
+  } catch { return {}; }
+})();
+let prefsTimer = null, prefsPending = {};
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('totkp.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('totkp.' + k, JSON.stringify(v)); } catch {} },
+  get(k, d) {
+    if (k in PREFS) return PREFS[k];
+    try { const v = localStorage.getItem('totkp.' + k); return v == null ? d : JSON.parse(v); } catch { return d; }
+  },
+  set(k, v) {
+    PREFS[k] = v;
+    try { localStorage.setItem('totkp.' + k, JSON.stringify(v)); } catch {}
+    if (REMOTE) return;   // a phone keeps its own view settings
+    prefsPending[k] = v;
+    clearTimeout(prefsTimer);
+    prefsTimer = setTimeout(() => {
+      const body = JSON.stringify(prefsPending);
+      prefsPending = {};
+      fetch('/api/prefs', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-TotK-Progress': '1' }, body, keepalive: true })
+        .catch(() => {});
+    }, 300);
+  },
+  flush() {   // closing the window right after a click: send what's still waiting
+    if (!Object.keys(prefsPending).length) return;
+    clearTimeout(prefsTimer);
+    const body = JSON.stringify(prefsPending);
+    prefsPending = {};
+    fetch('/api/prefs', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-TotK-Progress': '1' }, body, keepalive: true })
+      .catch(() => {});
+  },
 };
+addEventListener('pagehide', () => store.flush());
 
 const state = {
   data: null,
@@ -37,7 +76,7 @@ const state = {
   slot: store.get('slot', 'latest'),
   layer: store.get('layer', 'surface'),
   mode: store.get('mode', 'missing'),
-  off: new Set(store.get('off', CATS.filter(c => c.off).map(c => c.key))),
+  off: new Set(store.get('off', CATS.filter(c => !c.on).map(c => c.key))),
   search: '',
   lastMtime: null,
   tab: store.get('tab', 'map'),
@@ -65,7 +104,8 @@ const overlays = {};
 // Map built from the game's own map tiles: 12 x 10 tiles of 1000 world units = 125 units in this 1500 px space,
 // rows start 125 px down (z -5000). Two detail levels: 300 px tiles zoomed out, 840 px tiles zoomed in.
 const GameTiles = L.TileLayer.extend({
-  getTileUrl(c) { return `/assets/tiles/${this.options.layerName}/${this.options.lod}/${c.x}-${c.y - 1}.webp`; },
+  // ?v=: a new URL after the tiles are redrawn, so the browser doesn't keep showing cached old tiles
+  getTileUrl(c) { return `/assets/tiles/${this.options.layerName}/${this.options.lod}/${c.x}-${c.y - 1}.webp?v=${state.tileStamp}`; },
 });
 // The 840 px tiles are added on top from this zoom on. Switched here, not with the layers' minZoom/maxZoom:
 // Leaflet rounds the zoom before checking those, so with quarter-step zooms both layers could be off at
@@ -89,6 +129,7 @@ map.on('zoomend', () => { const o = overlays[state.layer]; if (o && o.syncDetail
 async function setupBaseMaps() {
   let meta = null;
   try { meta = await getJSON('/assets/tiles/meta.json'); } catch {}
+  state.tileStamp = meta ? (meta.built || meta.version || 1) : 1;
   // tiles drawn from the player's game files at setup; without them the map stays blank but markers still work
   for (const l of ['surface', 'sky', 'depths']) overlays[l] = gameTileLayer(l);
   state.mapSource = meta ? 'game' : 'none';
@@ -525,6 +566,45 @@ function selectFolder(info) {
   $('#setup-go').disabled = !(info && info.ok);
 }
 
+// ---------- Open on your phone
+function renderLan(st) {
+  // Settings section and the floating phone button's popup show the same thing
+  $('#share-btn').classList.toggle('on', !!st.enabled);
+  $('#share-off').hidden = !!st.enabled;
+  $('#share-box').hidden = !st.enabled;
+  $('#share-qr').innerHTML = st.qr || '';
+  $('#share-url').textContent = st.url || '';
+  $('#share-msg').hidden = !st.error;
+  $('#share-msg').textContent = st.error || '';
+  $('#lan-on').checked = !!st.enabled;
+  $('#lan-box').hidden = !st.enabled;
+  $('#lan-qr').innerHTML = st.qr || '';
+  $('#lan-url').textContent = st.url || '';
+  $('#lan-msg').hidden = !st.error;
+  $('#lan-msg').textContent = st.error || '';
+}
+async function setLan(enabled) {
+  const btn = enabled ? $('#share-on') : $('#share-stop'), label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = enabled ? 'Turning on…' : 'Turning off…';
+  try { renderLan(await post('/api/lan', { enabled })); }
+  catch (err) { renderLan({ enabled: false, error: err.message }); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+$('#lan-on').onchange = e => setLan(e.target.checked);
+$('#share-on').onclick = () => setLan(true);
+$('#share-stop').onclick = () => setLan(false);
+function showShare(open) {
+  $('#share-pop').hidden = !open;
+  $('#share-btn').setAttribute('aria-expanded', String(open));
+  if (open) getJSON('/api/lan').then(renderLan).catch(e => renderLan({ enabled: false, error: e.message }));
+}
+$('#share-btn').onclick = () => showShare($('#share-pop').hidden);
+$('#share-close').onclick = () => showShare(false);
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#share-pop').hidden) showShare(false); });
+$('#share-btn').hidden = REMOTE;   // the phone itself doesn't need it
+if (!REMOTE) getJSON('/api/lan').then(st => $('#share-btn').classList.toggle('on', !!st.enabled)).catch(() => {});
+
 async function openSetup(firstRun) {
   setup.firstRun = firstRun;
   $('#setup').hidden = false;
@@ -540,6 +620,8 @@ async function openSetup(firstRun) {
     $('#setup-foot').textContent = `Version ${st.version}` + (st.install ? ` · current folder: ${st.install.path}` : '');
     setup.candidates = st.candidates || [];
     setup.current = st.ready && st.install ? st.install.path : null;
+    $('#lan-step').hidden = firstRun;
+    if (!firstRun) getJSON('/api/lan').then(renderLan).catch(() => {});
     selectFolder(st.install && st.install.ok ? st.install : (setup.candidates[0] || null));
     if (st.job.running) watchJob();
   } catch (e) {
@@ -598,6 +680,7 @@ $('#setup-go').onclick = async () => {
 };
 $('#setup-close').onclick = () => { $('#setup').hidden = true; };
 $('#open-settings').onclick = () => openSetup(false);
+$('#open-settings').hidden = REMOTE;   // settings stay on the PC
 // Inside the app's own window (server.run_window opens /?app=1) closing the window quits, so there's no
 // Quit button; "Open in browser" shows the same map in the browser (e.g. on a second screen).
 const IN_APP = new URLSearchParams(location.search).has('app');
@@ -612,6 +695,7 @@ $('#quit').onclick = async () => {
 (async function init() {
   try {
     const st = await getJSON('/api/setup');
+    if (!st.ready && REMOTE) { setStatus("The app on your PC is not set up yet. Finish the setup there first.", 'err'); return; }
     if (!st.ready) { setStatus('Setup needed'); await openSetup(true); return; }
     await setupBaseMaps();
     state.data = await getJSON('/data/map_data.json');

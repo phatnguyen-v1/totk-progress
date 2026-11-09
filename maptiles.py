@@ -86,19 +86,29 @@ def decode_bntx(data):
 
 
 LAYERS = {'surface': 'G', 'sky': 'S', 'depths': 'U'}
+# Bump when the tile choice or drawing changes: installs then redraw their tiles. 2: complete sky tiles
+# instead of transparent overlays (two sky tiles were brown squares).
+TILES_VERSION = 2
 
 
 def pick_variants(romfs, prefix):
-    """{(layer, lod, col, row): romfs path} choosing the fully revealed variant (all T, then A)."""
+    """{(layer, lod, col, row): romfs path} choosing the fully revealed, complete variant of each tile.
+
+    Names are <L>_<CC>-<RR>_<LOD> plus suffix parts: region letters (T revealed / F not) and A/B world-state
+    letters, e.g. _TT, _T_A, _T_A_A. A tile with fewer parts than its siblings is a transparent overlay
+    (just islands, nothing behind them), so the most parts wins first, then the most T, then A over B.
+    """
     import re
-    rx = re.compile(r'([GSU])_(\d\d)-(\d\d)_(\d\d)(?:_([TF]+))?(?:_([AB]))?\.bntx\.zs$')
+    rx = re.compile(r'([GSU])_(\d\d)-(\d\d)_(\d\d)((?:_[TFAB]+)*)\.bntx\.zs$')
     best = {}
     for path in romfs.find(prefix):
         m = rx.search(path)
         if not m:
             continue
-        layer, col, row, lod, flags, ab = m.groups()
-        score = (flags or '').count('T') - len(flags or '') + (0.5 if ab in (None, 'A') else 0)
+        layer, col, row, lod, suffix = m.groups()
+        parts = [x for x in suffix.split('_') if x]
+        letters = ''.join(parts)
+        score = (len(parts), letters.count('T') - letters.count('F'), letters.count('A') - letters.count('B'))
         key = (layer, lod, int(col), int(row))
         if key not in best or score > best[key][0]:
             best[key] = (score, path)
@@ -111,6 +121,14 @@ def build_tiles(romfs, out_dir, lods=('02', '01'), progress=None):
     from pathlib import Path
     out_dir = Path(out_dir)
     report = progress or (lambda f, m: None)
+    # Existing tiles are kept so an interrupted setup resumes, but not tiles drawn by older tile code.
+    try:
+        old = json.loads((out_dir / 'meta.json').read_text(encoding='utf-8')).get('version')
+    except (OSError, ValueError):
+        old = TILES_VERSION
+    if old != TILES_VERSION:
+        import shutil
+        shutil.rmtree(out_dir, ignore_errors=True)
     chosen = pick_variants(romfs, 'UI/Map/MainField/')
     todo = [(name, lod, col, row, path) for (code, lod, col, row), path in sorted(chosen.items())
             for name, c in LAYERS.items() if c == code and lod in lods]
@@ -125,6 +143,6 @@ def build_tiles(romfs, out_dir, lods=('02', '01'), progress=None):
             tmp.replace(dest)
         report((i + 1) / len(todo), f'Drawing the {name} map… {i + 1}/{len(todo)}')
     (out_dir / 'meta.json').write_text(json.dumps({
-        'source': 'game', 'format': 'webp', 'lods': list(lods), 'cols': 12, 'rows': 10, 'tile_world': 1000,
+        'version': TILES_VERSION, 'built': int(__import__('time').time()), 'source': 'game', 'format': 'webp', 'lods': list(lods), 'cols': 12, 'rows': 10, 'tile_world': 1000,
         'origin': [-6000, -5000], 'layers': list(LAYERS)}))
     return len(todo)

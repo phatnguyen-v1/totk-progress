@@ -56,6 +56,26 @@
 </aside>
 
 <main id="main">
+  <button id="share-btn" class="share-btn" title="Open on your phone" aria-label="Open on your phone" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 18.5h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+  <div id="share-pop" class="share-pop" role="dialog" aria-labelledby="share-title" hidden>
+    <div class="share-head"><b id="share-title">Open on your phone</b>
+      <button id="share-close" class="icon-btn" aria-label="Close">×</button></div>
+    <p class="share-note">Only for phones and tablets on the <b>same Wi-Fi or network</b> as this PC. It won't
+      work over mobile data or from another network.</p>
+    <div id="share-off">
+      <p class="muted small">Shows this map, your quests and progress on the other device, read-only: it can't
+        change anything on this PC.</p>
+      <button id="share-on" class="btn primary">Turn on</button>
+    </div>
+    <div id="share-box" hidden>
+      <div id="share-qr" class="lan-qr"></div>
+      <div class="muted small">Scan with the phone's camera, or open:</div>
+      <code id="share-url"></code>
+      <div class="share-foot"><span class="muted small">Windows may ask once to allow the app on private networks.</span>
+        <button id="share-stop" class="btn quiet">Turn off</button></div>
+    </div>
+    <div id="share-msg" class="err" hidden></div>
+  </div>
   <nav class="layers" id="layers">
     <button data-layer="sky"><img src="/icons/sky.svg" data-icon="sky" alt="">Sky</button>
     <button data-layer="surface" class="on"><img src="/icons/surface.svg" data-icon="surface" alt="">Surface</button>
@@ -69,7 +89,7 @@
 <div id="setup" class="setup" hidden>
   <div class="setup-card" role="dialog" aria-labelledby="setup-title">
     <h2 id="setup-title">Set up TotK Progress Map</h2>
-    <p class="lead">Point the app at your TotK Recomp folder: the one with <code>totk.exe</code>. It reads your saves from
+    <p class="lead">Point the app at your <a href="https://github.com/valentderah/totk-pc-recomp" target="_blank" rel="noopener">TotK Recomp</a> folder: the one with <code>totk.exe</code>. It reads your saves from
       there and updates the map whenever the game saves. Nothing is ever written to your game or saves.</p>
 
     <div class="setup-step">
@@ -92,6 +112,20 @@
         <div id="job-msg" class="muted"></div>
       </div>
       <div id="setup-error" class="err" hidden></div>
+    </div>
+
+    <div class="setup-step" id="lan-step" hidden>
+      <h3>Open on your phone</h3>
+      <label class="switch"><input type="checkbox" id="lan-on"> Show the map on phones and tablets</label>
+      <p class="muted small">Only devices on the <b>same Wi-Fi or network</b> as this PC can open it (not over mobile
+        data). Read-only: they see your map, quests and progress, but can't change settings or anything on this
+        PC. Windows may ask once to allow the app on private networks. Also in the phone button at the bottom
+        right of the map.</p>
+      <div id="lan-box" class="lan-box" hidden>
+        <div id="lan-qr" class="lan-qr"></div>
+        <div><div class="muted small">Scan with your phone's camera, or open:</div><code id="lan-url"></code></div>
+      </div>
+      <div id="lan-msg" class="err" hidden></div>
     </div>
 
     <div class="setup-actions">

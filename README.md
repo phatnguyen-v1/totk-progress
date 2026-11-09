@@ -2,7 +2,8 @@
 
 ![The map: what's still missing around Link's last save, with Korok puzzle routes](docs/screenshots/map.webp)
 
-A local web app that reads your *Tears of the Kingdom* save and shows what you have and haven't
+A companion app for [TotK Recomp](https://github.com/valentderah/totk-pc-recomp), the native PC port of *Tears of the Kingdom*.
+It reads your save and shows what you have and haven't
 found on the map: Korok seeds (with their puzzle paths), shrines, lightroots, caves, Bubbul frogs,
 wells, chasms, locations, bosses, Sage's Wills, old maps, Addison's signs, schema stones and Yiga
 schematics, on the sky, surface and depths layers. A yellow arrow marks where Link was when the
@@ -35,6 +36,9 @@ It only ever reads your game and save files; it never writes to them.
 
 ## Get started
 
+You need [TotK Recomp](https://github.com/valentderah/totk-pc-recomp) installed with your game files (tested with v0.3.13, game
+version 1.2.1). The app builds its map, collectibles and quests from those files.
+
 1. Download `TotKProgressMap.exe` from [Releases](../../releases/latest) and put it anywhere.
 2. Double-click it. The app window opens with the setup page (Windows may say the app is unrecognized:
    *More info* → *Run anyway*; the exe isn't code-signed).
@@ -45,7 +49,16 @@ It only ever reads your game and save files; it never writes to them.
 
 Close the window to stop the app; opening the exe again while it runs brings the window to the front.
 **⚙** at the top of the panel changes the game folder and has *Open in browser*, to show the same map
-in your web browser too. The window uses Microsoft Edge WebView2, which comes with Windows 10 and 11;
+in your web browser too.
+
+**On your phone:** click the phone button at the bottom right of the map, *Turn on*, and scan the QR
+code (also in ⚙). Only phones and tablets on the **same Wi-Fi or network** as your PC can open it (not
+over mobile data). They get the same map, read-only: they can't change settings or anything on your PC (Windows
+may ask once to allow the app on private networks). It stays on until you turn it off.
+
+The map starts with a few categories (shrines, lightroots, caves, Bubbul frogs, collectibles) because
+all ~2,000 markers at once are slow; turn on more in the legend. Your choices (legend, filters, layer,
+tab) are saved by the app and kept when you close it. The window uses Microsoft Edge WebView2, which comes with Windows 10 and 11;
 without it the app uses your browser instead and you stop it with **⚙** → *Quit app*.
 Settings and downloaded data are kept in `%LOCALAPPDATA%\TotKProgressMap`; delete that folder to reset.
 
