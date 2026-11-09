@@ -7,8 +7,8 @@ Where the project stands, what was learned along the way, and what's next. Updat
 | | |
 |---|---|
 | Latest release | [v1.5.1](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.5.1): phone fixes (own first-time legend, close button for the side panel); v1.5.0: open on your phone, lighter default legend, saved view settings, sky map fix |
-| Release exe | (filled in after the build) |
-| Release check | (pending) |
+| Release exe | 24.5 MB, SHA-256 `890a4df561175fb077c24f28fc7514e5c0f526b6c55cc8a8b911b718bf8cb4d6` |
+| Release check | downloaded exe, clean data folder: app window, setup 42 s, 147 frogs, 366 places, panel close button and phone defaults present; Quit exits |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
