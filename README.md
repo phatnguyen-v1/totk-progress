@@ -71,3 +71,10 @@ Needs Python 3.9+ (standard library only) and internet for Leaflet (cdnjs) and t
 The save format logic and `map_data.json`, the icons and the maps come from
 [lud99/totk-unexplored](https://github.com/lud99/totk-unexplored) (Switch homebrew). The data and
 images come from the game, so `fetch_assets.py` downloads them to your machine instead of shipping them.
+
+## License
+
+The code in this repository is under the [MIT License](LICENSE). It covers this project's own code
+only: the game data, icons and maps that `fetch_assets.py` and `build_quests.py` put in `assets/`
+come from *The Legend of Zelda: Tears of the Kingdom* and are not part of it. This is an
+unofficial fan project, not affiliated with or endorsed by Nintendo.
