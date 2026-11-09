@@ -7,8 +7,8 @@ Where the project stands, what was learned along the way, and what's next. Updat
 | | |
 |---|---|
 | Latest release | [v1.3.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.3.0): own app window, Link's last saved position, app icon |
-| Release exe | (filled in after the build) |
-| Release check | (pending) |
+| Release exe | 24.4 MB, SHA-256 `2b4c7ababa708c452c2d31cd0109a188ae90cf057f13a7d71fce3abd9b527ac3` |
+| Release check | downloaded exe, clean data folder: app window opens, setup 45 s, no errors, 23 game icons, Link's position, 7 Korok seeds / 4 shrines / 253 quests; second launch hands over, Quit exits |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
