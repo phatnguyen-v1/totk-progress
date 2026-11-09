@@ -1,5 +1,7 @@
 # TotK Progress Map
 
+![The map: what's still missing around Link's last save, with Korok puzzle routes](docs/screenshots/map.webp)
+
 A local web app that reads your *Tears of the Kingdom* save and shows what you have and haven't
 found on the map: Korok seeds (with their puzzle paths), shrines, lightroots, caves, Bubbul frogs,
 wells, chasms, locations, bosses, Sage's Wills, old maps, Addison's signs, schema stones and Yiga
@@ -23,6 +25,10 @@ the quest data doesn't describe, so "not started" isn't a guarantee the giver is
 series first (e.g. Hoz: Bring Peace to Hyrule Field! before ... to Necluda!). The game decides that
 in dialogue scripts; the app infers series from quests by the same NPC that are next to each other
 in the adventure log (36 quests). Letters, statues and the Mysterious Voice aren't series.
+
+| Quests tab | The whole map |
+|---|---|
+| ![Quests tab with the current step of a quest](docs/screenshots/quests.webp) | ![Zoomed out: everything still missing on the surface](docs/screenshots/overview.webp) |
 
 It re-reads the save every few seconds, so the map updates on its own whenever the game saves.
 It only ever reads your game and save files; it never writes to them.

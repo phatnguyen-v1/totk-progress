@@ -377,8 +377,12 @@ def make_handler(state, server_ref):
 
         def send_file(self, path, cache=False):
             try:
-                path = path.resolve()
-                if not (path.is_relative_to(WEB.resolve()) or path.is_relative_to(ASSETS.resolve())) or not path.is_file():
+                # Only files under the web or data folder, compared without resolving: on some setups (a
+                # redirected or junctioned AppData, e.g. when started from a packaged app) resolve() maps the
+                # file somewhere else than the folder, and every asset would answer 404.
+                path = Path(path).absolute()
+                inside = any(path.is_relative_to(base.absolute()) for base in (WEB, ASSETS))
+                if '..' in path.parts or not inside or not path.is_file():
                     raise FileNotFoundError
             except (FileNotFoundError, OSError, ValueError):
                 self.send_error(404)

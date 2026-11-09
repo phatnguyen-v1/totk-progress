@@ -13,11 +13,9 @@ Where the project stands, what was learned along the way, and what's next. Updat
 
 ### Next up
 1. Before posting on Reddit (r/decomps first):
-   - VirusTotal scan of the release exe, link + SHA-256 in the release notes
-   - screenshots / GIF in the README (map, Quests tab)
+   - VirusTotal scan of the release exe, link in the release notes
    - test the Browse… folder picker, a game folder outside `<drive>:\Games\TotK`, another Windows user,
      game 1.4.3 saves, non-English game files
-   - release text with an FAQ (SmartScreen warning, read-only, what "Queued" means)
 
 ## Done
 
@@ -121,6 +119,15 @@ Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (
 `timg/__Combined.bntx` (1,231 textures). Texture name at `BRTI+0x60` (pointer to u16 length + text).
 Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
 plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
+
+## Unreleased
+
+- `send_file` no longer compares `resolve()`d paths: started from a packaged app (e.g. the Claude desktop
+  app) AppData is redirected to `AppData\Local\Packages\<app>\LocalCache`, `resolve()` returned that
+  path, and every asset answered 404. Now: absolute (not resolved) path inside the web or data folder and
+  no `..` part. Traversal attempts (`..`, encoded, absolute paths) checked: 404.
+- README screenshots (`docs/screenshots/*.webp`, taken with headless Edge from the running app) and
+  release notes with an FAQ for v1.4.0.
 
 ## v1.4.0 (released 2026-11-09)
 
