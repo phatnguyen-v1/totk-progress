@@ -77,6 +77,9 @@ select, input[type=search] {
   border-radius: 999px; padding: 6px 14px; color: var(--muted); }
 .layers button img { width: 16px; height: 16px; }
 .layers button.on { background: var(--line); color: var(--text); }
+.layers button[hidden] { display: none; }
+.layers .find-link { border-left: 1px solid var(--line); border-radius: 0 999px 999px 0; }
+.mk.player img { transform: none; filter: drop-shadow(0 0 4px rgba(255, 214, 64, .9)); }
 .panel-toggle { display: none; }
 
 /* markers */

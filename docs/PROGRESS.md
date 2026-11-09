@@ -6,9 +6,9 @@ Where the project stands, what was learned along the way, and what's next. Updat
 
 | | |
 |---|---|
-| Latest release | [v1.2.1](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.2.1): in-game map icons; v1.2.0 built the map and collectibles from the user's own game files |
-| Release exe | 20.3 MB, SHA-256 `f8c5c29ead4a42ece407f79caff8b305580bedc2b25a489af49137b49ae95441` |
-| Release check | downloaded exe, clean data folder: setup 42 s, no errors, 22 game icons, 7 Korok seeds / 4 shrines / 253 quests read |
+| Latest release | [v1.3.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.3.0): own app window, Link's last saved position, app icon |
+| Release exe | (filled in after the build) |
+| Release check | (pending) |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
@@ -126,6 +126,28 @@ Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (
 `timg/__Combined.bntx` (1,231 textures). Texture name at `BRTI+0x60` (pointer to u16 length + text).
 Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
 plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
+
+## v1.3.0 (released 2026-11-09): app window, Link's position, app icon
+
+- App icon: this project's own drawing (folded map, dotted trail, gold pin), `tools/make_app_icon.py` ->
+  `app.ico` (exe, `--icon`; pywebview uses the exe's icon for the window and taskbar) and
+  `web/app-icon.png` (browser tab).
+
+- The exe shows the map in its own window (pywebview + Edge WebView2, `server.run_window`), opened at
+  `/?app=1`; closing the window stops the app. The HTTP server runs on a background thread.
+- Second launch: `POST /api/focus` brings the running window to the front (falls back to opening the
+  browser). `/api/ping` reports `mode` (`window` / `browser`).
+- In the window the page hides *Quit app* and shows *Open in browser* (`POST /api/open-browser`).
+- Fallback: no pywebview or no WebView2 runtime -> the browser as before, with *Quit app*.
+  `--browser` forces it, `--no-browser` runs the server only. WebView2 data (localStorage) in
+  `<data>/webview`.
+- Link's position at the last save: Vector3 `PlayerStatus.SavePos` (table value = offset of 3 floats),
+  `savefile.player_position`, returned as `player` by `/api/progress`. Shown as the game's player arrow
+  (`Nt_MapPlayerIconNew_00^s`, yellow) on Link's layer, plus a **Link** button that flies there. The save
+  doesn't seem to store which way Link faces, so the arrow always points up.
+- Icons: `build_icons.VERSION` (now 2) in `meta.json`; the app rebuilds icons when it changes. Glyphs
+  are cropped to their visible part and scaled up as well as down (some are ~25 px in their texture).
+  Icon URLs carry `?v=<built>` so browsers don't show stale cached icons after a rebuild.
 
 ## Ideas for later
 - "What changed since last save" feed, You-are-here (`PlayerStatus.SavePos`), nearest missing items.

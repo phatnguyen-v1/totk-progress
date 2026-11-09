@@ -3,9 +3,10 @@ rem Builds dist\TotKProgressMap.exe (one file, no console window). Needs Python 
 cd /d "%~dp0"
 python -m pip install --upgrade -r requirements.txt pyinstaller || goto :fail
 python -m PyInstaller --noconfirm --clean --onefile --windowed ^
-  --name TotKProgressMap ^
+  --name TotKProgressMap --icon app.ico ^
   --add-data "web;web" ^
   --hidden-import zstandard --hidden-import texture2ddecoder --hidden-import PIL.WebPImagePlugin --hidden-import PIL.PngImagePlugin ^
+  --hidden-import webview --collect-all webview ^
   server.py || goto :fail
 echo.
 echo Built: %~dp0dist\TotKProgressMap.exe

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TotK Progress Map</title>
+<link rel="icon" type="image/png" href="/app-icon.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -59,6 +60,7 @@
     <button data-layer="sky"><img src="/icons/sky.svg" data-icon="sky" alt="">Sky</button>
     <button data-layer="surface" class="on"><img src="/icons/surface.svg" data-icon="surface" alt="">Surface</button>
     <button data-layer="depths"><img src="/icons/depths.svg" data-icon="depths" alt="">Depths</button>
+    <button id="find-link" class="find-link" title="Where Link was when the game last saved" hidden><img src="/icons/player.svg" data-icon="player" alt="">Link</button>
   </nav>
   <button id="panel-toggle" class="panel-toggle" aria-label="Toggle panel">☰</button>
   <div id="map"></div>
@@ -98,7 +100,8 @@
       <button id="setup-go" class="btn primary" disabled>Set up</button>
       <button id="setup-close" class="btn" hidden>Close</button>
       <span class="spacer"></span>
-      <button id="quit" class="btn quiet" title="Stop the app (it runs in the background)">Quit app</button>
+      <button id="open-browser" class="btn quiet" title="Also open the map in your web browser" hidden>Open in browser</button>
+      <button id="quit" class="btn quiet" title="Stop the app">Quit app</button>
     </div>
     <div class="setup-foot muted" id="setup-foot"></div>
   </div>

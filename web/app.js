@@ -82,10 +82,15 @@ async function setupBaseMaps() {
     overlays[l] = meta ? gameTileLayer(l) : L.imageOverlay(`/assets/map/${l}.png`, bounds);
   state.mapSource = meta ? 'game' : 'download';
   // Icons taken from the player's own game files (build_icons.py); the app's own SVGs otherwise.
-  try { state.gameIcons = new Set((await getJSON('/assets/gameicons/meta.json')).icons); } catch {}
+  try {
+    const m = await getJSON('/assets/gameicons/meta.json');
+    state.gameIcons = new Set(m.icons);
+    state.iconStamp = m.built || 0;   // new URL after a rebuild, so the browser doesn't keep old cached icons
+  } catch {}
   document.querySelectorAll('#layers img[data-icon]').forEach(img => { img.src = iconSrc(img.dataset.icon); });
 }
-const iconSrc = name => (state.gameIcons && state.gameIcons.has(name) ? `/assets/gameicons/${name}.png` : `/icons/${name}.svg`);
+const iconSrc = name => (state.gameIcons && state.gameIcons.has(name)
+  ? `/assets/gameicons/${name}.png?v=${state.iconStamp}` : `/icons/${name}.svg`);
 map.fitBounds(bounds);
 map.setMaxBounds(L.latLngBounds(bounds).pad(0.2));
 const markerLayer = L.layerGroup().addTo(map);
@@ -159,6 +164,28 @@ function render() {
       }
     });
   }
+  renderPlayer();
+}
+
+// Link's position when the game last saved (PlayerStatus.SavePos), on the layer he's on.
+const playerLayer = L.layerGroup().addTo(map);
+let playerMarker = null;
+function renderPlayer() {
+  playerLayer.clearLayers();
+  playerMarker = null;
+  const p = state.progress && state.progress.player;
+  $('#find-link').hidden = !p;
+  if (!p || layerOf(p.y) !== state.layer) return;
+  const s = 30;
+  playerMarker = L.marker(toLatLng(p), {
+    icon: L.divIcon({ className: 'mk player', html: `<img src="${iconSrc('player')}" alt="">`,
+      iconSize: [s, s], iconAnchor: [s / 2, s / 2], popupAnchor: [0, -s / 2] }),
+    zIndexOffset: 10000, keyboard: false,
+  });
+  const when = state.progress.mtime ? new Date(state.progress.mtime * 1000).toLocaleString() : '';
+  playerMarker.bindPopup(`<div class="pop"><h3>Link</h3><div class="row">Where you were at the last save · ${layerOf(p.y)}</div>
+    ${when ? `<div class="row">Saved ${esc(when)}</div>` : ''}<div class="row">x ${Math.round(p.x)} · y ${Math.round(p.y)} · z ${Math.round(p.z)}</div></div>`);
+  playerLayer.addLayer(playerMarker);
 }
 
 function renderLegend() {
@@ -405,12 +432,19 @@ function setLayer(l) {
   for (const k in overlays) map.hasLayer(overlays[k]) && map.removeLayer(overlays[k]);
   overlays[l].addTo(map);
   if (overlays[l].bringToBack) overlays[l].bringToBack();
-  document.querySelectorAll('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === l));
+  document.querySelectorAll('#layers button[data-layer]').forEach(b => b.classList.toggle('on', b.dataset.layer === l));
   render();
   renderQuestTargets();
 }
 
-document.querySelectorAll('#layers button').forEach(b => b.onclick = () => setLayer(b.dataset.layer));
+document.querySelectorAll('#layers button[data-layer]').forEach(b => b.onclick = () => setLayer(b.dataset.layer));
+$('#find-link').onclick = () => {
+  const p = state.progress && state.progress.player;
+  if (!p) return;
+  if (layerOf(p.y) !== state.layer) setLayer(layerOf(p.y));
+  map.flyTo(toLatLng(p), Math.max(map.getZoom(), 1.5), { duration: 0.8 });
+  setTimeout(() => playerMarker && playerMarker.openPopup(), 900);
+};
 document.querySelectorAll('#mode button').forEach(b => {
   b.classList.toggle('on', b.dataset.mode === state.mode);
   b.onclick = () => {
@@ -548,6 +582,12 @@ $('#setup-go').onclick = async () => {
 };
 $('#setup-close').onclick = () => { $('#setup').hidden = true; };
 $('#open-settings').onclick = () => openSetup(false);
+// Inside the app's own window (server.run_window opens /?app=1) closing the window quits, so there's no
+// Quit button; "Open in browser" shows the same map in the browser (e.g. on a second screen).
+const IN_APP = new URLSearchParams(location.search).has('app');
+$('#quit').hidden = IN_APP;
+$('#open-browser').hidden = !IN_APP;
+$('#open-browser').onclick = () => post('/api/open-browser').catch(() => {});
 $('#quit').onclick = async () => {
   try { await post('/api/quit'); } catch {}
   document.body.insertAdjacentHTML('beforeend', '<div class="bye"><div><h2>TotK Progress Map stopped.</h2><p>You can close this tab. Open the app again any time to see your progress.</p></div></div>');

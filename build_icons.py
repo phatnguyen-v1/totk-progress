@@ -10,6 +10,7 @@ Sources:
 - UI/Tex/PictureBook/<actor>_Icon.bntx.zs: compendium pictures (168 px photos).
 """
 import json
+import time
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
@@ -18,6 +19,7 @@ import gamefiles
 import maptiles
 from paths import ASSETS
 
+VERSION = 2  # bump when the icon set or its drawing changes: the app then rebuilds it
 SIZE = 96  # output px; markers are drawn at 20-24 css px, so this stays sharp on high-dpi screens
 
 # name: (kind, source, colour)
@@ -45,6 +47,7 @@ RECIPES = {
     'old_map': ('item', 'Obj_TreasureMap_00', None),
     'schema_stone': ('item', 'Obj_AutoBuilderDraft_00', None),
     'yiga_schematic': ('item', 'Obj_AutoBuilderDraftAssassin_00', None),
+    'player': ('mask', 'Nt_MapPlayerIconNew_00^s', (255, 214, 64)),
     'sky': ('mask', 'MapTabIcon_Sky^s', (255, 255, 255)),
     'surface': ('mask', 'MapTabIcon_Ground^s', (255, 255, 255)),
     'depths': ('mask', 'MapTabIcon_Cave^s', (255, 255, 255)),
@@ -60,8 +63,14 @@ def _image(data, offset):
 
 
 def _fit(img, box):
-    img = img.crop(img.getbbox() or (0, 0, *img.size))
-    img.thumbnail((box, box), Image.LANCZOS)
+    # crop to what's visible; masks have faint noise around the glyph, so ignore near-transparent pixels
+    visible = img.getchannel('A').point(lambda v: 255 if v > 100 else 0).getbbox()
+    if visible:  # keep a little of the soft edge
+        l, t, r, b = visible
+        visible = (max(l - 2, 0), max(t - 2, 0), min(r + 2, img.width), min(b + 2, img.height))
+    img = img.crop(visible or (0, 0, *img.size))
+    scale = box / max(img.size)   # up or down: some glyphs are only ~25 px in their texture
+    img = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))), Image.LANCZOS)
     out = Image.new('RGBA', (SIZE, SIZE))
     out.alpha_composite(img, ((SIZE - img.width) // 2, (SIZE - img.height) // 2))
     return out
@@ -127,7 +136,7 @@ def build(romfs, out=ASSETS / 'gameicons', log=print):
             continue
         img.save(out / f'{name}.png', optimize=True)
         written.append(name)
-    (out / 'meta.json').write_text(json.dumps({'icons': written}), encoding='utf-8')
+    (out / 'meta.json').write_text(json.dumps({'version': VERSION, 'icons': written, 'built': int(time.time())}), encoding='utf-8')
     log(f'{len(written)} game icons -> {out}')
     return written
 

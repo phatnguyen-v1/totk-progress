@@ -25,6 +25,36 @@ import savefile
 from paths import APP_NAME, ASSETS, CONFIG, DATA, FROZEN, LOG, VERSION, WEB
 
 APP_ID = 'totk-progress-map'
+
+
+class Ui:
+    """How the page is shown: in the app's own window (pywebview, Edge WebView2) or in the browser."""
+    mode = 'browser'
+    window = None
+    url = None
+
+    @classmethod
+    def focus(cls):
+        """Bring the window to the front (a second launch of the exe asks for this)."""
+        w = cls.window
+        if not w:
+            if cls.url:
+                webbrowser.open(cls.url)
+            return
+        try:
+            w.restore()
+            w.show()
+            w.on_top = True
+            w.on_top = False
+        except Exception:
+            traceback.print_exc()
+
+    @classmethod
+    def quit(cls, server):
+        if cls.window:
+            cls.window.destroy()   # ends webview.start(); main() then stops the server
+        else:
+            server.shutdown()
 CSRF_HEADER = 'X-TotK-Progress'   # POSTs must carry it, so other websites can't drive this local app
 
 
@@ -186,7 +216,15 @@ class State:
             traceback.print_exc()
 
     def needs_icons(self):
-        return bool(self.install and self.install.get('game')) and not (ASSETS / 'gameicons' / 'meta.json').is_file()
+        """Game files available but no icons yet, or icons from an older icon set."""
+        if not (self.install and self.install.get('game')):
+            return False
+        import build_icons
+        try:
+            meta = json.loads((ASSETS / 'gameicons' / 'meta.json').read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return True
+        return meta.get('version') != build_icons.VERSION
 
     def start_upgrade(self):
         if self.install and not self.job['running']:
@@ -358,7 +396,7 @@ def make_handler(state, server_ref):
             p = url.path
             try:
                 if p == '/api/ping':
-                    self.send_json({'app': APP_ID, 'version': VERSION})
+                    self.send_json({'app': APP_ID, 'version': VERSION, 'mode': Ui.mode})
                 elif p == '/api/setup':
                     self.send_json(state.setup_status(with_candidates=q.get('scan', ['0'])[0] == '1'))
                 elif p in ('/api/slots', '/api/progress') and not state.ready():
@@ -412,7 +450,13 @@ def make_handler(state, server_ref):
                     self.send_json({'ok': True, 'info': info})
                 elif p == '/api/quit':
                     self.send_json({'ok': True})
-                    threading.Thread(target=lambda: (time.sleep(0.3), server_ref[0].shutdown()), daemon=True).start()
+                    threading.Thread(target=lambda: (time.sleep(0.3), Ui.quit(server_ref[0])), daemon=True).start()
+                elif p == '/api/focus':
+                    Ui.focus()
+                    self.send_json({'ok': True, 'mode': Ui.mode})
+                elif p == '/api/open-browser':
+                    webbrowser.open(Ui.url)
+                    self.send_json({'ok': True})
                 else:
                     self.send_json({'error': 'not found'}, 404)
             except ValueError as e:
@@ -439,7 +483,8 @@ def main():
     ap.add_argument('--save-dir', help='read saves from this folder instead of the configured install')
     ap.add_argument('--port', type=int, default=int(os.environ.get('PORT', 8787)))
     ap.add_argument('--host', default='127.0.0.1')
-    ap.add_argument('--no-browser', action='store_true')
+    ap.add_argument('--browser', action='store_true', help='show the map in your browser instead of the app window')
+    ap.add_argument('--no-browser', action='store_true', help="don't open a window or browser (server only)")
     args = ap.parse_args()
 
     if FROZEN:  # no console window: keep a log next to the data
@@ -450,10 +495,10 @@ def main():
     browse_host = 'localhost' if args.host in ('127.0.0.1', '0.0.0.0') else args.host
     srv = None
     for port in range(args.port, args.port + 10):
-        if already_running('127.0.0.1', port):   # second launch: just show the page again
+        if already_running('127.0.0.1', port):   # second launch: bring the running app to the front
             print(f'Already running on {port}')
             if not args.no_browser:
-                webbrowser.open(f'http://{browse_host}:{port}/')
+                focus_running(port, f'http://{browse_host}:{port}/')
             return
         try:
             server_ref = [None]
@@ -474,15 +519,63 @@ def main():
         state.start_upgrade()
     elif state.ready() and state.needs_icons():
         threading.Thread(target=state.build_icons, daemon=True).start()
+    Ui.url = url
     print(f'Serving {url}', flush=True)
-    if not args.no_browser:
+    if args.no_browser:
+        serve(srv)
+    elif args.browser or not run_window(srv, url):
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+        serve(srv)
+    print('Stopped.')
+
+
+def serve(srv):
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
-    print('Stopped.')
 
+
+def run_window(srv, url):
+    """Show the page in the app's own window; closing it stops the app. Returns False, before serving
+    anything, when pywebview isn't available; the caller then uses the browser. If the window can't open
+    (no WebView2 runtime, e.g. an old or stripped-down Windows), it falls back to the browser itself."""
+    try:
+        import webview
+    except Exception:
+        traceback.print_exc()
+        return False
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        webview.settings['OPEN_EXTERNAL_LINKS_IN_BROWSER'] = True
+        Ui.window = webview.create_window('TotK Progress Map', url + '?app=1', width=1400, height=900,
+                                          min_size=(760, 520), background_color='#14181d', text_select=True)
+        Ui.mode = 'window'
+        webview.start(gui='edgechromium', private_mode=False, storage_path=str(DATA / 'webview'))
+    except Exception:
+        traceback.print_exc()
+        print('No app window: using the browser')
+        Ui.window, Ui.mode = None, 'browser'
+        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+        try:
+            while thread.is_alive():
+                thread.join(0.5)
+        except KeyboardInterrupt:
+            pass
+        return True
+    srv.shutdown()   # window closed
+    return True
+
+
+def focus_running(port, url):
+    try:
+        req = urllib.request.Request(f'http://127.0.0.1:{port}/api/focus', data=b'{}', method='POST',
+                                     headers={'X-TotK-Progress': '1', 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            json.loads(r.read())
+    except (OSError, ValueError):
+        webbrowser.open(url)
 
 if __name__ == '__main__':
     main()

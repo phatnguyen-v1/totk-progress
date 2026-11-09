@@ -33,6 +33,8 @@ ICONS = {
     'addison_sign': ('#c0532f', '<rect x="8" y="7" width="16" height="10" rx="1.5"/><path d="M16 17v9" stroke-width="2.6" stroke-linecap="round" fill="none"/><path d="M11 11h10M11 14h7" stroke="#c0532f" stroke-width="1.4" fill="none"/>', W),
     'schema_stone': ('#3d8b8f', '<path d="M9 5h14l2 22H7z"/><path d="M12 11h8M12 15h8M12 19h5" stroke="#3d8b8f" stroke-width="1.6" fill="none"/>', W),
     'yiga_schematic': ('#a8272f', '<path d="M7 7h18v18H7z"/><circle cx="16" cy="15" r="4" fill="#a8272f"/><path d="M16 20v3" stroke="#a8272f" stroke-width="2" fill="none"/><circle cx="16" cy="15" r="1.6"/>', W),
+    # Link's last saved position
+    'player': ('#e0a400', '<path d="M16 5l8 20-8-5-8 5z"/>', W),
     # Layers
     'sky': ('#4f7fb3', '<path d="M9 22a5 5 0 0 1 1-10 7 7 0 0 1 13 2 4 4 0 0 1 0 8z"/>', W),
     'surface': ('#5f8f3f', '<path d="M4 24l8-12 5 7 3-4 8 9z"/>', W),

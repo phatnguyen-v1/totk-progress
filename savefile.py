@@ -213,6 +213,21 @@ def read_guids(buf, offset):
     return guids
 
 
+SAVE_POS_HASH = mmh3('PlayerStatus.SavePos')
+
+
+def player_position(buf, table):
+    """Where Link was when the game saved: Vector3 `PlayerStatus.SavePos` (the table value is the offset
+    of three floats). None when the save doesn't have it."""
+    off = table.get(SAVE_POS_HASH)
+    if off is None or not 0 < off <= len(buf) - 12:
+        return None
+    x, y, z = struct.unpack_from('<3f', buf, off)
+    if not all(abs(v) < 20000 for v in (x, y, z)) or (x, y, z) == (0, 0, 0):
+        return None
+    return {'x': round(x, 1), 'y': round(y, 1), 'z': round(z, 1)}
+
+
 def save_info(path):
     """Version id and play time (seconds) of a progress.sav, without full parsing."""
     buf = Path(path).read_bytes()
@@ -250,5 +265,6 @@ def parse(path, map_data):
     return {
         'version_id': struct.unpack_from('<I', buf, 4)[0],
         'playtime': table.get(PLAYTIME_HASH, 0),
+        'player': player_position(buf, table),
         'done': done,
     }

@@ -3,7 +3,8 @@
 A local web app that reads your *Tears of the Kingdom* save and shows what you have and haven't
 found on the map: Korok seeds (with their puzzle paths), shrines, lightroots, caves, Bubbul frogs,
 wells, chasms, locations, bosses, Sage's Wills, old maps, Addison's signs, schema stones and Yiga
-schematics, on the sky, surface and depths layers.
+schematics, on the sky, surface and depths layers. A yellow arrow marks where Link was when the
+game last saved; the **Link** button at the top jumps there.
 
 The **Quests** tab lists all 253 adventure-log quests (Main Quests, Side Adventures, Side Quests,
 Shrine Quests) with their status (in progress, not started, locked, done), the quest giver and
@@ -29,15 +30,17 @@ It only ever reads your game and save files; it never writes to them.
 ## Get started
 
 1. Download `TotKProgressMap.exe` from [Releases](../../releases/latest) and put it anywhere.
-2. Double-click it. Your browser opens the setup page (Windows may say the app is unrecognized:
+2. Double-click it. The app window opens with the setup page (Windows may say the app is unrecognized:
    *More info* → *Run anyway*; the exe isn't code-signed).
 3. Pick your TotK Recomp folder (the one with `totk.exe`). The app looks on your drives and usually
    finds it; otherwise click **Browse…**. It tells you if the folder has game files and saves.
 4. Click **Set up**. It draws the map and finds every shrine, Korok, cave, boss and quest in your own
    game files (about a minute). Then the map opens with your progress.
 
-The app runs in the background with no window. Opening the exe again just reopens the page. To
-change the game folder or stop the app, use **⚙** at the top of the panel (*Quit app*).
+Close the window to stop the app; opening the exe again while it runs brings the window to the front.
+**⚙** at the top of the panel changes the game folder and has *Open in browser*, to show the same map
+in your web browser too. The window uses Microsoft Edge WebView2, which comes with Windows 10 and 11;
+without it the app uses your browser instead and you stop it with **⚙** → *Quit app*.
 Settings and downloaded data are kept in `%LOCALAPPDATA%\TotKProgressMap`; delete that folder to reset.
 
 ## Run from source
@@ -60,7 +63,8 @@ omfs'), 'assets/tiles')"`
 draws the map tiles, `python fetch_assets.py [--small]` downloads the fallback map from lud99 (`--small` = 1500 px
 maps), `python build_quests.py [--romfs DIR] [--lang EUen]` rebuilds the quest list (other
 languages: `EUen`, `EUfr`, `EUde`, `JPja`, ...). `server.py` options: `--save-dir <folder>` (read
-saves from there instead of the configured install), `--port 8787`, `--host 127.0.0.1`, `--no-browser`.
+saves from there instead of the configured install), `--port 8787`, `--host 127.0.0.1`, `--browser` (use the browser instead of the app window),
+`--no-browser` (no window or browser, just the local server).
 
 The map page loads Leaflet from cdnjs, so the browser needs internet.
 
