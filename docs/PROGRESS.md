@@ -6,9 +6,9 @@ Where the project stands, what was learned along the way, and what's next. Updat
 
 | | |
 |---|---|
-| Latest release | [v1.5.1](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.5.1): phone fixes (own first-time legend, close button for the side panel); v1.5.0: open on your phone, lighter default legend, saved view settings, sky map fix |
-| Release exe | 24.5 MB, SHA-256 `890a4df561175fb077c24f28fc7514e5c0f526b6c55cc8a8b911b718bf8cb4d6` |
-| Release check | downloaded exe, clean data folder: app window, setup 42 s, 147 frogs, 366 places, panel close button and phone defaults present; Quit exits |
+| Latest release | [v1.5.2](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.5.2): smoother zooming with many markers; v1.5.x: open on your phone, lighter default legend, saved view settings, sky map fix |
+| Release exe | (filled in after the build) |
+| Release check | (pending) |
 | Tested on | one PC: TotK Recomp v0.3.13, game 1.2.1, English (USen), saves on `F:` |
 
 ### Next up
@@ -119,6 +119,14 @@ Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (
 `timg/__Combined.bntx` (1,231 textures). Texture name at `BRTI+0x60` (pointer to u16 length + text).
 Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
 plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
+
+## v1.5.2 (released 2026-11-09): smoother zooming
+
+- Map lag measured (zoom fps, all 1,770 markers on): tiles alone 100 fps; default 8 categories 92;
+  everything 11; everything with small vector icons instead of the 96 px game icons also 11 (icon size
+  isn't the cause); everything without per-marker effects 28. Removed the per-marker scale transition
+  and the drop-shadow / grayscale filters (`.mk img`): everything now 30 fps, default 97. Done markers
+  are faded (opacity .5) with the ✓ badge. Next step if needed: draw markers on one canvas.
 
 ## v1.5.1 (released 2026-11-09): phone fixes
 

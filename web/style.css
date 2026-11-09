@@ -85,10 +85,12 @@ select, input[type=search] {
 
 /* markers */
 #map { --s: 1; }
-.mk img { width: 100%; height: 100%; display: block; transform: scale(var(--s)); transition: transform .15s;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
+/* No per-marker animation or CSS filters: with ~1,800 markers a scale transition on every zoom plus a
+   drop-shadow/grayscale filter on each made zooming drop to ~11 fps (28 fps without them). The game icons
+   carry their own dark outline, and done markers are faded and get a ✓ badge. */
+.mk img { width: 100%; height: 100%; display: block; transform: scale(var(--s)); }
 .mk:hover img { transform: scale(calc(var(--s) * 1.35)); }
-.mk.done img { opacity: .55; filter: grayscale(.4) drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
+.mk.done img { opacity: .5; }
 .mk.done::after {
   content: "✓"; position: absolute; right: -4px; bottom: -4px; width: 12px; height: 12px;
   font-size: 9px; line-height: 12px; text-align: center; border-radius: 50%;
