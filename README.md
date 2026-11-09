@@ -33,8 +33,8 @@ It only ever reads your game and save files; it never writes to them.
    *More info* → *Run anyway*; the exe isn't code-signed).
 3. Pick your TotK Recomp folder (the one with `totk.exe`). The app looks on your drives and usually
    finds it; otherwise click **Browse…**. It tells you if the folder has game files and saves.
-4. Click **Set up**. It downloads the map data (~45 MB) and reads the quest list from your game files.
-   Then the map opens with your progress.
+4. Click **Set up**. It draws the map and finds every shrine, Korok, cave, boss and quest in your own
+   game files (about a minute). Then the map opens with your progress.
 
 The app runs in the background with no window. Opening the exe again just reopens the page. To
 change the game folder or stop the app, use **⚙** at the top of the panel (*Quit app*).
@@ -53,7 +53,9 @@ Running from source keeps data next to the code (`assets/`, `config.json`). `bui
 `dist\TotKProgressMap.exe` with PyInstaller; pushing a `v*` tag builds it on GitHub Actions and
 attaches it to a release.
 
-Command-line tools: `python fetch_assets.py [--small]` downloads the map data (`--small` = 1500 px
+Command-line tools: `python build_mapdata.py --romfs <install>omfs` extracts the map data,
+`python -c "import gamefiles, maptiles; maptiles.build_tiles(gamefiles.Romfs(r'<install>omfs'), 'assets/tiles')"`
+draws the map tiles, `python fetch_assets.py [--small]` downloads the fallback map from lud99 (`--small` = 1500 px
 maps), `python build_quests.py [--romfs DIR] [--lang EUen]` rebuilds the quest list (other
 languages: `EUen`, `EUfr`, `EUde`, `JPja`, ...). `server.py` options: `--save-dir <folder>` (read
 saves from there instead of the configured install), `--port 8787`, `--host 127.0.0.1`, `--no-browser`.
@@ -80,13 +82,16 @@ The map page loads Leaflet from cdnjs, so the browser needs internet.
 - `web/` is the map (Leaflet). World `(x, z)` maps to pixel `750 + x/8, 750 + z/8` on a 1500 px map;
   height `y >= 750` is sky and `y < -50` is depths.
 
-The save format logic and `map_data.json`, the icons and the maps come from
-[lud99/totk-unexplored](https://github.com/lud99/totk-unexplored) (Switch homebrew). The data and
-images come from the game, so `fetch_assets.py` downloads them to your machine instead of shipping them.
+The map, the collectibles and the quests are read from your own TotK Recomp game files on your PC
+(`maptiles.py`, `build_mapdata.py`, `build_quests.py`); see [docs/PROGRESS.md](docs/PROGRESS.md) for the
+formats and save flags. The icons are this project's own. The save-reading approach comes from
+[lud99/totk-unexplored](https://github.com/lud99/totk-unexplored) (Switch homebrew); its `map_data.json`
+is still used for Korok puzzle types and routes, and its map images as a fallback when no game files
+are available (e.g. emulator saves). Nothing game-derived is shipped in this repository.
 
 ## License
 
 The code in this repository is under the [MIT License](LICENSE). It covers this project's own code
-only: the game data, icons and maps that `fetch_assets.py` and `build_quests.py` put in `assets/`
+only: the game data and maps that the app builds or downloads into `assets/`
 come from *The Legend of Zelda: Tears of the Kingdom* and are not part of it. This is an
 unofficial fan project, not affiliated with or endorsed by Nintendo.

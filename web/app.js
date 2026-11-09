@@ -62,7 +62,26 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const map = L.map('map', { crs: L.CRS.Simple, minZoom: -1.5, maxZoom: 3, zoomSnap: 0.25, attributionControl: false, zoomControl: true });
 const bounds = [[-SIZE, 0], [0, SIZE]];
 const overlays = {};
-for (const l of ['surface', 'sky', 'depths']) overlays[l] = L.imageOverlay(`/assets/map/${l}.png`, bounds);
+// Map built from the game's own map tiles: 12 x 10 tiles of 1000 world units = 125 units in this 1500 px space,
+// rows start 125 px down (z -5000). Two detail levels: 300 px tiles zoomed out, 840 px tiles zoomed in.
+const GameTiles = L.TileLayer.extend({
+  getTileUrl(c) { return `/assets/tiles/${this.options.layerName}/${this.options.lod}/${c.x}-${c.y - 1}.webp`; },
+});
+function gameTileLayer(name) {
+  const common = { layerName: name, tileSize: 125, minNativeZoom: 0, maxNativeZoom: 0, noWrap: true,
+    bounds: L.latLngBounds([[-1375, 0], [-125, 1500]]), keepBuffer: 4 };
+  return L.layerGroup([
+    new GameTiles('', { ...common, lod: '02', minZoom: -3, maxZoom: 1 }),
+    new GameTiles('', { ...common, lod: '01', minZoom: 1.25 }),
+  ]);
+}
+async function setupBaseMaps() {
+  let meta = null;
+  try { meta = await getJSON('/assets/tiles/meta.json'); } catch {}
+  for (const l of ['surface', 'sky', 'depths'])
+    overlays[l] = meta ? gameTileLayer(l) : L.imageOverlay(`/assets/map/${l}.png`, bounds);
+  state.mapSource = meta ? 'game' : 'download';
+}
 map.fitBounds(bounds);
 map.setMaxBounds(L.latLngBounds(bounds).pad(0.2));
 const markerLayer = L.layerGroup().addTo(map);
@@ -83,7 +102,7 @@ function icon(cat, done) {
     const s = cat.size || 24;
     iconCache[k] = L.divIcon({
       className: 'mk' + (done ? ' done' : ''),
-      html: `<img src="/assets/icons/${cat.icon}.png" alt="">`,
+      html: `<img src="/icons/${cat.icon}.svg" alt="">`,
       iconSize: [s, s], iconAnchor: [s / 2, s / 2], popupAnchor: [0, -s / 2],
     });
   }
@@ -150,7 +169,7 @@ function renderLegend() {
     const b = document.createElement('button');
     b.className = 'cat' + (state.off.has(cat.key) ? ' off' : '') + (total && n === total ? ' complete' : '');
     b.title = state.off.has(cat.key) ? 'Show on map' : 'Hide from map';
-    b.innerHTML = `<img src="/assets/icons/${cat.icon}.png" alt=""><span>${esc(cat.label)}</span><span class="n">${n} / ${total}</span>
+    b.innerHTML = `<img src="/icons/${cat.icon}.svg" alt=""><span>${esc(cat.label)}</span><span class="n">${n} / ${total}</span>
       <span class="bar"><i style="width:${total ? (100 * n / total).toFixed(1) : 0}%"></i></span>`;
     b.onclick = () => { state.off.has(cat.key) ? state.off.delete(cat.key) : state.off.add(cat.key); store.set('off', [...state.off]); renderLegend(); render(); };
     el.appendChild(b);
@@ -361,6 +380,12 @@ async function poll() {
     const slotNo = state.slot === 'latest' ? s.latest : Number(state.slot);
     const info = s.slots.find(x => x.slot === slotNo);
     if (info && (info.mtime !== state.lastMtime || !state.progress || state.progress.slot !== slotNo)) await loadProgress();
+    // background update of the map data (e.g. first start after an app update)
+    if (s.job && s.job.upgrade) {
+      if (s.job.running) setStatus(`${s.job.message} ${Math.round(s.job.progress * 100)}%`);
+      else if (state.upgrading && s.job.done) { location.reload(); return; }
+      state.upgrading = s.job.running;
+    }
   } catch (e) {
     if (e instanceof TypeError) setStatus('The app is not running. Open TotKProgressMap again, then refresh this page.', 'err');
     else if (/setup required/.test(e.message)) { again = false; setStatus('Setup needed'); openSetup(true); }
@@ -374,7 +399,8 @@ async function poll() {
 function setLayer(l) {
   state.layer = l; store.set('layer', l);
   for (const k in overlays) map.hasLayer(overlays[k]) && map.removeLayer(overlays[k]);
-  overlays[l].addTo(map).bringToBack();
+  overlays[l].addTo(map);
+  if (overlays[l].bringToBack) overlays[l].bringToBack();
   document.querySelectorAll('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === l));
   render();
   renderQuestTargets();
@@ -527,6 +553,7 @@ $('#quit').onclick = async () => {
   try {
     const st = await getJSON('/api/setup');
     if (!st.ready) { setStatus('Setup needed'); await openSetup(true); return; }
+    await setupBaseMaps();
     state.data = await getJSON('/data/map_data.json');
     try { state.quests = (await getJSON('/data/quests.json')).quests; } catch { state.quests = null; }
     setTab(state.tab);

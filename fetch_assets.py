@@ -1,7 +1,8 @@
-"""Download the object data, icons and map images from lud99/totk-unexplored into assets/.
+"""Fallback map assets from lud99/totk-unexplored, for setups without TotK Recomp game files
+(e.g. emulator saves). With game files, build_mapdata.py and maptiles.py make everything locally and
+only lud99's map_data.json is used, to add Korok puzzle details (see fetch_reference).
 
-These come from the game's own files, so they are fetched to your machine, not shipped here.
-Run once: python fetch_assets.py   (add --small for the 1500 px maps instead of 4500 px)
+Run: python fetch_assets.py   (add --small for 1500 px maps instead of 4500 px)
 """
 import json
 import sys
@@ -13,24 +14,33 @@ REPO = 'lud99/totk-unexplored'
 REF = 'main'
 RAW = f'https://raw.githubusercontent.com/{REPO}/{REF}/romfs/'
 
-ICONS = [
-    'korok_hidden', 'korok_carry', 'shrine', 'lightroot', 'cave', 'bubbul', 'well', 'chasm',
-    'location', 'hinox', 'talus', 'molduga', 'flux_construct', 'frox', 'gleeok', 'sages_will',
-    'old_map', 'addison_sign', 'schema_stone', 'yiga_schematic', 'surface', 'sky', 'depths',
-]
 # rough sizes in MB, only for the progress bar
 MAP_MB = {'medium': 15.0, 'small': 2.0}
 
 
+def have_game_tiles(root=ASSETS):
+    return (root / 'tiles' / 'meta.json').is_file()
+
+
 def have_assets(root=ASSETS):
-    return (root / 'map_data.json').is_file() and all((root / 'map' / f'{l}.png').is_file()
-                                                       for l in ('surface', 'sky', 'depths'))
+    """Map data plus a base map: tiles drawn from the game, or the downloaded map images."""
+    maps = have_game_tiles(root) or all((root / 'map' / f'{l}.png').is_file() for l in ('surface', 'sky', 'depths'))
+    return (root / 'map_data.json').is_file() and maps
+
+
+def fetch_reference(timeout=30):
+    """lud99's map_data.json as a dict, or None when offline. Small (~0.8 MB), not stored."""
+    try:
+        req = urllib.request.Request(RAW + 'map_data.json', headers={'User-Agent': 'totk-progress-map'})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+    except (OSError, ValueError):
+        return None
 
 
 def fetch_all(root=ASSETS, size='medium', progress=None):
     """Download everything missing. progress(fraction 0..1, message) is called as it goes."""
     files = [('map_data.json', root / 'map_data.json', 0.8, 'object data')]
-    files += [(f'icons/{n}.png', root / 'icons' / f'{n}.png', 0.01, 'icons') for n in ICONS]
     files += [(f'map/{l}-{size}.png', root / 'map' / f'{l}.png', MAP_MB[size], f'{l} map') for l in ('surface', 'sky', 'depths')]
     total = sum(w for *_, w, _ in files)
     done = 0.0

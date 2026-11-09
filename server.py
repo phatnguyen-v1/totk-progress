@@ -169,32 +169,70 @@ class State:
         threading.Thread(target=self._setup_job, args=(info,), daemon=True).start()
         return info
 
+    def needs_game_build(self):
+        """True when game files are available but the map wasn't built from them yet (e.g. after an update)."""
+        import fetch_assets
+        return bool(self.install and self.install.get('game')) and not (
+            fetch_assets.have_game_tiles() and (ASSETS / 'source.json').is_file())
+
+    def start_upgrade(self):
+        if self.install and not self.job['running']:
+            self.job = {'running': True, 'progress': 0.0, 'message': 'Updating the map from your game files…',
+                        'error': None, 'done': False, 'upgrade': True}
+            threading.Thread(target=self._setup_job, args=(self.install,), daemon=True).start()
+
     def _setup_job(self, info):
         import fetch_assets
         job = self.job
+
+        def stage(lo, hi):
+            def prog(frac, msg):
+                job['progress'] = round(lo + (hi - lo) * frac, 3)
+                job['message'] = msg
+            return prog
+
         try:
-            if not fetch_assets.have_assets():
-                def prog(frac, msg):
-                    job['progress'] = round(frac * 0.85, 3)
-                    job['message'] = msg
-                try:
-                    fetch_assets.fetch_all(ASSETS, 'medium', prog)
-                except OSError as e:
-                    raise RuntimeError(f"Couldn't download the map data ({e}). Check your internet connection and try again.")
-            job['progress'], job['message'] = 0.88, 'Reading the quest list from your game files…'
-            if info['game']:
+            if info.get('game'):
+                romfs = Path(info['path']) / 'romfs'
+                import gamefiles
+                import maptiles
+                import build_mapdata
+                rf = gamefiles.Romfs(romfs)
+                stage(0, 0.6)(0, 'Drawing the map from your game files…')
+                maptiles.build_tiles(rf, ASSETS / 'tiles', progress=stage(0, 0.6))
+                stage(0.6, 0.75)(0, 'Finding shrines, Koroks and everything else in your game files…')
+                build_mapdata.build(romfs, ASSETS / 'map_data.json', log=lambda m: stage(0.6, 0.75)(0.5, m[:80]))
+                stage(0.75, 0.8)(0, 'Adding Korok puzzle details…')
+                ref = fetch_assets.fetch_reference()
+                if ref:
+                    data = json.loads((ASSETS / 'map_data.json').read_text(encoding='utf-8'))
+                    build_mapdata.merge_reference(data, ref)
+                    build_mapdata.write(data, ASSETS / 'map_data.json')
+                else:
+                    job['warning'] = 'Korok puzzle details were skipped (no internet). Everything else is ready.'
+                (ASSETS / 'source.json').write_text(json.dumps({'map': 'game', 'korok_details': bool(ref),
+                                                                'built': time.time()}))
+                import shutil
+                for old in ('map', 'icons'):  # downloaded map images and icons from older versions
+                    shutil.rmtree(ASSETS / old, ignore_errors=True)
+                stage(0.8, 1)(0, 'Reading the quest list from your game files…')
                 try:
                     import build_quests
-                    build_quests.build(Path(info['path']) / 'romfs', ASSETS / 'quests.json', log=lambda m: None)
+                    build_quests.build(romfs, ASSETS / 'quests.json', log=lambda m: None)
                 except Exception as e:  # the map still works without quests
                     traceback.print_exc()
                     job['warning'] = f'Quest list not built: {e}'
+            elif not fetch_assets.have_assets():
+                try:
+                    fetch_assets.fetch_all(ASSETS, 'medium', stage(0, 1))
+                except OSError as e:
+                    raise RuntimeError(f"Couldn't download the map data ({e}). Check your internet connection and try again.")
             job['progress'], job['message'] = 1.0, 'Done'
             self.reload()
             job['done'] = True
         except Exception as e:
             traceback.print_exc()
-            job['error'] = str(e)
+            job['error'] = f'{type(e).__name__}: {e}'
         finally:
             job['running'] = False
 
@@ -312,7 +350,8 @@ def make_handler(state, server_ref):
                 elif p in ('/api/slots', '/api/progress') and not state.ready():
                     self.send_json({'error': 'setup required', 'setup': True}, 409)
                 elif p == '/api/slots':
-                    self.send_json({'save_dir': str(state.save_dir), 'latest': state.latest_slot(), 'slots': state.slots()})
+                    self.send_json({'save_dir': str(state.save_dir), 'latest': state.latest_slot(), 'slots': state.slots(),
+                                    'job': state.job})
                 elif p == '/api/progress':
                     slot = q.get('slot', [''])[0]
                     slot = state.latest_slot() if slot in ('', 'latest') else int(slot)
@@ -416,6 +455,9 @@ def main():
     url = f'http://{browse_host}:{port}/'
     print(f'Data folder: {DATA}')
     print(f'Install: {(state.install or {}).get("path")}  ready={state.ready()}')
+    if state.ready() and state.needs_game_build():
+        print('Map not built from the game files yet: updating in the background')
+        state.start_upgrade()
     print(f'Serving {url}', flush=True)
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

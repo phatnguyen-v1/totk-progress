@@ -1,0 +1,105 @@
+"""Decode the in-game map tiles (UI/Map/MainField/*.bntx.zs) from your own TotK files into PNG tiles.
+
+Layers: G = surface, S = sky, U = depths. Each layer is a 12 x 10 grid of tiles of 1000 x 1000 world
+units (x -6000..6000, z -5000..5000), in five detail levels: 00 = 3000 px, 01 = 840 px, 02 = 300 px,
+03 = 135 px, 04 = 27 px. Tiles are ASTC compressed (sRGB) in the Switch's block-linear layout.
+"""
+import struct
+
+import texture2ddecoder
+
+ASTC_BLOCKS = {0x2D: (4, 4), 0x2E: (5, 4), 0x2F: (5, 5), 0x30: (6, 5), 0x31: (6, 6), 0x32: (8, 5),
+               0x33: (8, 6), 0x34: (8, 8), 0x35: (10, 5), 0x36: (10, 6), 0x37: (10, 8), 0x38: (10, 10),
+               0x39: (12, 10), 0x3A: (12, 12)}
+
+
+def _div_up(a, b):
+    return (a + b - 1) // b
+
+
+def deswizzle(data, width_blocks, height_blocks, bpp, block_height_log2):
+    """Tegra X1 block-linear -> linear, in units of compressed blocks of `bpp` bytes."""
+    block_height = 1 << block_height_log2
+    gobs_wide = _div_up(width_blocks * bpp, 64)
+    row_bytes = width_blocks * bpp
+    out = bytearray(row_bytes * height_blocks)
+    mv = memoryview(data)
+    for y in range(height_blocks):
+        y_base = (y // (8 * block_height)) * 512 * block_height * gobs_wide + (y % (8 * block_height) // 8) * 512 \
+            + ((y % 8) // 2) * 64 + (y % 2) * 16
+        o = y * row_bytes
+        for x in range(width_blocks):
+            xb = x * bpp
+            addr = y_base + (xb // 64) * 512 * block_height + ((xb % 64) // 32) * 256 + ((xb % 32) // 16) * 32 + (xb % 16)
+            out[o:o + bpp] = mv[addr:addr + bpp]
+            o += bpp
+    return bytes(out)
+
+
+def decode_bntx(data):
+    """First texture of a BNTX file -> (width, height, RGBA bytes)."""
+    i = data.find(b'BRTI')
+    if i < 0:
+        raise ValueError('no BRTI texture')
+    fmt = struct.unpack_from('<I', data, i + 0x1C)[0]
+    width, height = struct.unpack_from('<II', data, i + 0x24)
+    layout = struct.unpack_from('<I', data, i + 0x34)[0]
+    image_size = struct.unpack_from('<I', data, i + 0x50)[0]
+    ptrs = struct.unpack_from('<Q', data, i + 0x70)[0]
+    mip0 = struct.unpack_from('<Q', data, ptrs)[0]
+    kind = fmt >> 8
+    if kind not in ASTC_BLOCKS:
+        raise ValueError(f'unsupported texture format 0x{fmt:04x}')
+    bw, bh = ASTC_BLOCKS[kind]
+    wb, hb = _div_up(width, bw), _div_up(height, bh)
+    raw = deswizzle(data[mip0:mip0 + image_size], wb, hb, 16, layout & 7)
+    bgra = texture2ddecoder.decode_astc(raw, width, height, bw, bh)
+    # BGRA -> RGBA
+    rgba = bytearray(bgra)
+    rgba[0::4], rgba[2::4] = bgra[2::4], bgra[0::4]
+    return width, height, bytes(rgba)
+
+
+LAYERS = {'surface': 'G', 'sky': 'S', 'depths': 'U'}
+
+
+def pick_variants(romfs, prefix):
+    """{(layer, lod, col, row): romfs path} choosing the fully revealed variant (all T, then A)."""
+    import re
+    rx = re.compile(r'([GSU])_(\d\d)-(\d\d)_(\d\d)(?:_([TF]+))?(?:_([AB]))?\.bntx\.zs$')
+    best = {}
+    for path in romfs.find(prefix):
+        m = rx.search(path)
+        if not m:
+            continue
+        layer, col, row, lod, flags, ab = m.groups()
+        score = (flags or '').count('T') - len(flags or '') + (0.5 if ab in (None, 'A') else 0)
+        key = (layer, lod, int(col), int(row))
+        if key not in best or score > best[key][0]:
+            best[key] = (score, path)
+    return {k: v[1] for k, v in best.items()}
+
+
+def build_tiles(romfs, out_dir, lods=('02', '01'), progress=None):
+    """Decode the chosen map tiles to out_dir/<layer>/<lod>/<col>-<row>.png. Returns the number of tiles."""
+    import json
+    from pathlib import Path
+    out_dir = Path(out_dir)
+    report = progress or (lambda f, m: None)
+    chosen = pick_variants(romfs, 'UI/Map/MainField/')
+    todo = [(name, lod, col, row, path) for (code, lod, col, row), path in sorted(chosen.items())
+            for name, c in LAYERS.items() if c == code and lod in lods]
+    from PIL import Image
+    for i, (name, lod, col, row, path) in enumerate(todo):
+        dest = out_dir / name / lod / f'{col}-{row}.webp'
+        if not dest.is_file():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            w, h, px = decode_bntx(romfs.read(path))
+            tmp = dest.with_suffix('.part')
+            Image.frombytes('RGBA', (w, h), px).convert('RGB').save(tmp, 'WEBP', quality=80, method=4)
+            tmp.replace(dest)
+        report((i + 1) / len(todo), f'Drawing the {name} map… {i + 1}/{len(todo)}')
+    (out_dir / 'meta.json').write_text(json.dumps({
+        'source': 'game', 'format': 'webp', 'lods': list(lods), 'cols': 12, 'rows': 10, 'tile_world': 1000,
+        'origin': [-6000, -5000], 'layers': list(LAYERS)}))
+    return len(todo)

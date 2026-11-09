@@ -5,7 +5,7 @@ python -m pip install --upgrade -r requirements.txt pyinstaller || goto :fail
 python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --name TotKProgressMap ^
   --add-data "web;web" ^
-  --hidden-import zstandard ^
+  --hidden-import zstandard --hidden-import texture2ddecoder --hidden-import PIL.WebPImagePlugin ^
   server.py || goto :fail
 echo.
 echo Built: %~dp0dist\TotKProgressMap.exe
