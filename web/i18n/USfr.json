@@ -1,0 +1,10 @@
+{
+  "_about": "Français (Canada) : seulement ce qui diffère du français de France (EUfr.json), d'après les textes du jeu.",
+  "cat.lynel": "Centaléos",
+  "one.lynel": "Centaléo",
+  "pop.lynel": "Non suivi : les Centaléos reviennent après chaque lune de sang",
+  "qcat.shrine": "Quêtes de sanctuaires",
+  "data": {
+    "Lynel": "Centaléo"
+  }
+}

@@ -6,11 +6,14 @@ Everything comes from the game's own indexes and placement data:
 - Banc/<Field>/LocationArea: shrines, lightroots, caves (+ Bubbul frogs), wells, chasms, named places
 - Banc/MainField/HiddenKorok: Korok seeds and Korok friends (by instance ID); the puzzle type is the Korok
   actor's HideType, routes come from the puzzle actors (flowers, race start blocks, Korok friends' pairs)
-- Banc/<Field>/<section>_Static|Dynamic, Sky, Cave, DeepHole: bosses, chests with Sage's Wills,
-  old maps and Yiga schematics, Addison's signboards
+- Banc/<Field>/<section>_Static|Dynamic, Sky, Cave, DeepHole: bosses and Lynels, treasure chests (by what's
+  inside: Sage's Wills, old maps, Yiga schematics, armor, the rest), Addison's signboards, the Dragon Tears
+  and the Great Fairies
 - RSDB/PouchActorInfo: which armor an old map leads to; Banc/MinusField/TreasureMap
 - Mals/<lang>: names
-Save flags are murmur3 hashes of '<Prefix>.<instance ID or name>' (see docs/PROGRESS.md).
+Save flags are murmur3 hashes of '<Prefix>.<instance ID or name>' (see docs/PROGRESS.md); the flag names of
+the Dragon Tears (Complete_DragonTearsNN), Skyview Towers (IsOpenCannon.TowerNN) and Great Fairies
+(IsAppear_DressFairy_NN) are the ones the game's event flows set. Opened chests are in the save's GUID list.
 """
 import argparse
 import json
@@ -50,7 +53,11 @@ HIDE_TYPES = {
 # Places that have no LocationArea entry but a map label (LocationMarker actor) and a visit flag:
 # Bargainer Statues, Forge Constructs and the Smithing Construct.
 MARKER_PLACES = re.compile(r'^(DemonStatue_\d+|SmallDemonStatue|SmeltShopGolem_\d+|ForgeShopGolem)$')
-PLACE_CATEGORIES = re.compile(r'^(City|DragonTears|Dungeon|SkyArchipelago|Stable|SpotBig.*|SpotMiddle\w+)$')
+PLACE_CATEGORIES = re.compile(r'^(City|Dungeon|SkyArchipelago|Stable|SpotBig.*|SpotMiddle\w+)$')
+DATA_KEYS = ['shrines', 'lightroots', 'hidden_koroks', 'carry_koroks', 'bubbuls', 'locations', 'caves', 'wells', 'chasms',
+             'skyview_towers', 'great_fairies', 'hinoxes', 'taluses', 'moldugas', 'flux_constructs', 'froxes', 'gleeoks',
+             'lynels', 'old_maps', 'sages_wills', 'addison_signposts', 'schema_stones', 'yiga_schematics', 'dragon_tears',
+             'armor_chests', 'treasure_chests']
 
 
 def basename(path):
@@ -71,13 +78,24 @@ def build(romfs, out=OUT, lang='USen', log=print):
 
     names = {**msgs('LocationMsg/Location'), **msgs('LocationMsg/Dungeon')}
     drafts = msgs('ActorMsg/AutoBuilderDraft')
-    data = {k: [] for k in ['shrines', 'lightroots', 'hidden_koroks', 'carry_koroks', 'bubbuls', 'locations', 'caves',
-                            'wells', 'chasms', 'hinoxes', 'taluses', 'moldugas', 'flux_constructs', 'froxes', 'gleeoks',
-                            'old_maps', 'sages_wills', 'addison_signposts', 'schema_stones', 'yiga_schematics']}
+    items = msgs('ActorMsg/PouchContent')
+    npcs = msgs('ActorMsg/Npc')
+    creatures = msgs('ActorMsg/PictureBook')
+    data = {k: [] for k in DATA_KEYS}
+
+    def item_name(actor):
+        """In-game name of a chest's content: 'Royal Guard Cap', 'Diamond', 'Arrow x 5', ..."""
+        parts = actor.split('_')
+        while parts:
+            n = items.get('_'.join(parts) + '_Name')
+            if n:
+                return n
+            parts.pop()
+        return ''
 
     # ---- places, from the game's location index
     log('Reading the location index…')
-    places = {}
+    places, tear_areas = {}, {}
     for field in ('MainField', 'MinusField'):
         la = gamefiles.byml(rf.read(f'Banc/{field}/LocationArea/{field}.locationarea.byml.zs')) or {}
         for cat, entries in la.items():
@@ -106,6 +124,12 @@ def build(romfs, out=OUT, lang='USen', log=print):
                         data['bubbuls'].append({'internal_name': name, 'display_name': display,
                                                 'completion_hash': mmh3(f'IsGetCaveMasterMedal.{name}'),
                                                 'position': pos(markers[0]['Trans'])})
+                elif cat == 'Tower':   # activated: its launch pad (cannon) is open
+                    data['skyview_towers'].append({'internal_name': name, 'display_name': display,
+                                                   'completion_hash': mmh3(f'IsOpenCannon.{name}'), 'position': pos(trans[0])})
+                elif cat == 'DragonTears':   # the geoglyph; the tear's exact spot comes from its actor below
+                    tear_areas[name] = (names.get(name) or f"Dragon's Tear {int(name[-2:])}" if name[-2:].isdigit() else display,
+                                        trans[0])
                 elif PLACE_CATEGORIES.match(cat):
                     data['locations'].append({'display_name': display, 'completion_hash': mmh3(f'IsVisitLocation.{name}'),
                                               'position': pos(trans[0])})
@@ -124,6 +148,7 @@ def build(romfs, out=OUT, lang='USen', log=print):
     rx = re.compile(r'Banc/(MainField|MinusField)/([A-J]-\d_(Static|Dynamic)|Sky/.*|Cave/.*|DeepHole/.*|LargeDungeon/.*|Castle/.*)\.bcett\.byml\.zs$')
     korok_kind, seen = {}, set()
     flowers, start_blocks, landing_blocks, vine_pots, carry, markers, frogs = [], [], [], [], {}, {}, {}
+    tears, fairies = [], {}
     bool_flags = {x['Hash'] for x in (gamefiles.byml(rf.read(rf.find('GameData/GameDataList.Product.', '.byml.zs')[-1]))['Data'].get('Bool') or [])}
     treasure_maps = {}
     pouch = gamefiles.byml(rf.read(rf.find('RSDB/PouchActorInfo.', '.byml.zs')[-1]))
@@ -155,7 +180,16 @@ def build(romfs, out=OUT, lang='USen', log=print):
                 vine_pots.append(t)
             elif g in ('KorokCarry_Destination', 'KorokCarryPassenger_Pair'):
                 carry[h] = (g, t, [l.get('Dst') for l in a.get('Links') or []])
-            if g.startswith('Enemy_'):
+            elif g == 'FldObj_DragonTears_01':
+                tears.append(t)
+            elif re.match(r'Npc_DressFairy_\d\d$', g):
+                fairies.setdefault(g, t)
+            if g.startswith('Enemy_Lynel'):
+                # Lynels come back with every Blood Moon and their defeat flag resets with them, so only where they are
+                seen.add(h)
+                data['lynels'].append({'display_name': creatures.get(g.replace('_Boss', '') + '_Name') or 'Lynel',
+                                       'position': pos(t), 'actor': g})
+            elif g.startswith('Enemy_'):
                 kind = g.split('_')[1]
                 if kind in BOSSES and mmh3(f'IsDefeatBossEnemy.{h}') in bool_flags:
                     seen.add(h)
@@ -176,6 +210,11 @@ def build(romfs, out=OUT, lang='USen', log=print):
                     seen.add(h)
                     data['yiga_schematics'].append({'completion_hash': mmh3(f'ReadyMadeAutoBuilderDraft.{drop}.IsOwned'),
                                                     'display_name': drafts.get(f'{drop}_Name', drop), 'position': pos(t)})
+                else:   # every other chest; opened chests are in the save's GUID list
+                    seen.add(h)
+                    key = 'armor_chests' if drop.startswith('Armor_') else 'treasure_chests'
+                    data[key].append({'guid_hash': str(h), 'position': pos(t),
+                                      'display_name': item_name(drop) or ('Armor' if key == 'armor_chests' else 'Treasure chest')})
 
     trails = flower_trails(flowers)
     pairs = carry_routes(carry)
@@ -214,6 +253,21 @@ def build(romfs, out=OUT, lang='USen', log=print):
         flag = mmh3(f'IsVisitLocation.{loc}')
         if flag in bool_flags and flag not in shown:
             data['locations'].append({'display_name': names.get(loc, loc), 'completion_hash': flag, 'position': pos(t)})
+
+    # Dragon Tears: the tear actor inside each geoglyph (memory watched = Complete_DragonTearsNN)
+    for name, (display, t) in sorted(tear_areas.items()):
+        flag = mmh3(f'Complete_{name}')
+        if flag in bool_flags:
+            spot = _nearest(tears, t, 600) or t
+            data['dragon_tears'].append({'internal_name': name, 'display_name': display, 'completion_hash': flag,
+                                         'position': pos(spot)})
+
+    # Great Fairies: revived = IsAppear_DressFairy_NN; at the fairy's fountain
+    for g, t in sorted(fairies.items()):
+        flag = mmh3(f'IsAppear_{g[4:]}')
+        if flag in bool_flags:
+            data['great_fairies'].append({'display_name': npcs.get(f'{g}_Name', 'Great Fairy'), 'completion_hash': flag,
+                                          'position': pos(t)})
 
     for draft, site in SCHEMA_SITES.items():
         if site in places:
