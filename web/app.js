@@ -1,29 +1,99 @@
 'use strict';
 
+// ---------- the app's own words ----------
+// In the same language as the game text (Settings -> Language; follows TotK Recomp by default). The server
+// merges web/i18n/<code>.json over English (USen.json), the source and the fallback for anything missing.
+const I18N = (() => {
+  try {
+    const x = new XMLHttpRequest();
+    x.open('GET', '/api/i18n', false);
+    x.send();
+    if (x.status === 200) return JSON.parse(x.responseText);
+  } catch {}
+  return { lang: 'USen', locale: 'en-US', strings: {} };
+})();
+const LOCALE = I18N.locale || 'en-US';
+const STR = I18N.strings || {};
+const fill = (s, vars) => (vars ? s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)) : s);
+// t('key', {n: 3}): the text for `key` with {n} filled in. Values may hold markup (only from our own files);
+// callers escape what they fill in when the result goes into innerHTML.
+const t = (key, vars) => fill(typeof STR[key] === 'string' ? STR[key] : key, vars);
+// tn('badge.slots', 2): the plural form for that number (`key.one`, `key.few`, ... `key.other`)
+const plural = new Intl.PluralRules(LOCALE);
+const tn = (key, n, vars) => {
+  const k = `${key}.${plural.select(n)}`;
+  return t(k in STR ? k : `${key}.other`, { n, ...vars });
+};
+// Messages the server sends in English (setup notes, progress, errors): looked up by their English text.
+const SERVER_PATTERNS = [
+  [/^Drawing the (\w+) map… (\d+)\/(\d+)$/, m => t('msg.drawing', { layer: t('layer.' + m[1]), i: m[2], n: m[3] })],
+  [/^Quest list not built: (.*)$/s, m => t('msg.noQuests', { error: m[1] })],
+  [/^Could not open port (\d+) on ([^:]+): (.*)$/s, m => t('msg.port', { port: m[1], ip: m[2], error: m[3] })],
+  [/^RuntimeError: (.*)$/s, m => tMsg(m[1])],
+  [/^map data: /, () => tMsg('Finding shrines, Koroks and everything else in your game files…')],
+  [/^could not read slot (\d+): (.*)$/s, m => t('msg.slot', { n: m[1], error: m[2] })],
+];
+function tMsg(s) {
+  if (!s) return s;
+  const table = STR.server || {};
+  if (typeof table[s] === 'string') return table[s];
+  for (const [rx, f] of SERVER_PATTERNS) { const m = rx.exec(s); if (m) return f(m); }
+  return s;
+}
+// Labels the map data has in English (Korok puzzles, fallback names): see build_mapdata.py.
+function tData(s) {
+  if (!s) return s;
+  const table = STR.data || {};
+  if (typeof table[s] === 'string') return table[s];
+  let m = /^Old map \((\d+)\)$/.exec(s);
+  if (m) return t('data.oldMap', { n: m[1] });
+  m = /^Dragon's Tear (\d+)$/.exec(s);
+  if (m) return t('data.dragonTear', { n: m[1] });
+  return s;
+}
+function applyI18n() {
+  document.documentElement.lang = LOCALE;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+  for (const a of ['title', 'placeholder', 'aria-label']) {
+    document.querySelectorAll(`[data-i18n-${a}]`).forEach(el => el.setAttribute(a, t(el.getAttribute(`data-i18n-${a}`))));
+  }
+}
+applyI18n();
+const layerName = l => t('layer.' + l);
+
 // key must match savefile.CATEGORIES; data = map_data.json key. `on`: shown the first time (showing all
 // ~2,000 markers at once is slow); the rest is a click away in the legend, or "Show all". `phone`: the
 // even smaller first set on phones and tablets opening the map over the network.
 const CATS = [
-  { key: 'hidden_korok', data: 'hidden_koroks', label: 'Korok seeds (hidden)', icon: 'korok_hidden', group: 'Koroks & shrines', size: 20 },
-  { key: 'carry_korok', data: 'carry_koroks', label: 'Korok friends', icon: 'korok_carry', group: 'Koroks & shrines', size: 22 },
-  { key: 'shrine', data: 'shrines', label: 'Shrines', icon: 'shrine', group: 'Koroks & shrines', on: true, phone: true },
-  { key: 'lightroot', data: 'lightroots', label: 'Lightroots', icon: 'lightroot', group: 'Koroks & shrines', on: true, phone: true },
-  { key: 'cave', data: 'caves', label: 'Caves', icon: 'cave', group: 'Places', on: true, phone: true },
-  { key: 'bubbul', data: 'bubbuls', label: 'Bubbul frogs', icon: 'bubbul', group: 'Places', on: true, phone: true },
-  { key: 'well', data: 'wells', label: 'Wells', icon: 'well', group: 'Places' },
-  { key: 'chasm', data: 'chasms', label: 'Chasms', icon: 'chasm', group: 'Places' },
-  { key: 'location', data: 'locations', label: 'Locations', icon: 'location', group: 'Places' },
-  { key: 'hinox', data: 'hinoxes', label: 'Hinoxes', icon: 'hinox', group: 'Bosses' },
-  { key: 'talus', data: 'taluses', label: 'Taluses', icon: 'talus', group: 'Bosses' },
-  { key: 'molduga', data: 'moldugas', label: 'Moldugas', icon: 'molduga', group: 'Bosses' },
-  { key: 'flux_construct', data: 'flux_constructs', label: 'Flux Constructs', icon: 'flux_construct', group: 'Bosses' },
-  { key: 'frox', data: 'froxes', label: 'Froxes', icon: 'frox', group: 'Bosses' },
-  { key: 'gleeok', data: 'gleeoks', label: 'Gleeoks', icon: 'gleeok', group: 'Bosses' },
-  { key: 'sages_will', data: 'sages_wills', label: "Sage's Wills", icon: 'sages_will', group: 'Collectibles', on: true },
-  { key: 'old_map', data: 'old_maps', label: 'Old maps', icon: 'old_map', group: 'Collectibles', on: true },
-  { key: 'addison_sign', data: 'addison_signposts', label: "Addison's signs", icon: 'addison_sign', group: 'Collectibles' },
-  { key: 'schema_stone', data: 'schema_stones', label: 'Schema stones', icon: 'schema_stone', group: 'Collectibles', on: true },
-  { key: 'yiga_schematic', data: 'yiga_schematics', label: 'Yiga schematics', icon: 'yiga_schematic', group: 'Collectibles', on: true },
+  { key: 'hidden_korok', data: 'hidden_koroks', label: t('cat.hidden_korok'), icon: 'korok_hidden', group: t('group.koroks'), size: 20 },
+  { key: 'carry_korok', data: 'carry_koroks', label: t('cat.carry_korok'), icon: 'korok_carry', group: t('group.koroks'), size: 22 },
+  { key: 'shrine', data: 'shrines', label: t('cat.shrine'), icon: 'shrine', group: t('group.koroks'), on: true, phone: true },
+  { key: 'lightroot', data: 'lightroots', label: t('cat.lightroot'), icon: 'lightroot', group: t('group.koroks'), on: true, phone: true },
+  { key: 'cave', data: 'caves', label: t('cat.cave'), icon: 'cave', group: t('group.places'), on: true, phone: true },
+  { key: 'bubbul', data: 'bubbuls', label: t('cat.bubbul'), icon: 'bubbul', group: t('group.places'), on: true, phone: true },
+  { key: 'well', data: 'wells', label: t('cat.well'), icon: 'well', group: t('group.places') },
+  { key: 'chasm', data: 'chasms', label: t('cat.chasm'), icon: 'chasm', group: t('group.places') },
+  { key: 'location', data: 'locations', label: t('cat.location'), icon: 'location', group: t('group.places') },
+  { key: 'skyview_tower', data: 'skyview_towers', label: t('cat.skyview_tower'), icon: 'skyview_tower', group: t('group.places'), on: true, phone: true, added: 1 },
+  { key: 'great_fairy', data: 'great_fairies', label: t('cat.great_fairy'), icon: 'great_fairy', group: t('group.places'), on: true, added: 1 },
+  { key: 'hinox', data: 'hinoxes', label: t('cat.hinox'), icon: 'hinox', group: t('group.bosses') },
+  { key: 'talus', data: 'taluses', label: t('cat.talus'), icon: 'talus', group: t('group.bosses') },
+  { key: 'molduga', data: 'moldugas', label: t('cat.molduga'), icon: 'molduga', group: t('group.bosses') },
+  { key: 'flux_construct', data: 'flux_constructs', label: t('cat.flux_construct'), icon: 'flux_construct', group: t('group.bosses') },
+  { key: 'frox', data: 'froxes', label: t('cat.frox'), icon: 'frox', group: t('group.bosses') },
+  { key: 'gleeok', data: 'gleeoks', label: t('cat.gleeok'), icon: 'gleeok', group: t('group.bosses') },
+  // Lynels come back after every Blood Moon, so the game keeps no lasting record: where they are, not tracked
+  { key: 'lynel', data: 'lynels', label: t('cat.lynel'), icon: 'lynel', group: t('group.bosses'), track: false, added: 1 },
+  { key: 'sages_will', data: 'sages_wills', label: t('cat.sages_will'), icon: 'sages_will', group: t('group.collectibles'), on: true },
+  { key: 'old_map', data: 'old_maps', label: t('cat.old_map'), icon: 'old_map', group: t('group.collectibles'), on: true },
+  { key: 'addison_sign', data: 'addison_signposts', label: t('cat.addison_sign'), icon: 'addison_sign', group: t('group.collectibles') },
+  { key: 'schema_stone', data: 'schema_stones', label: t('cat.schema_stone'), icon: 'schema_stone', group: t('group.collectibles'), on: true },
+  { key: 'yiga_schematic', data: 'yiga_schematics', label: t('cat.yiga_schematic'), icon: 'yiga_schematic', group: t('group.collectibles'), on: true },
+  { key: 'dragon_tear', data: 'dragon_tears', label: t('cat.dragon_tear'), icon: 'dragon_tear', group: t('group.collectibles'), on: true, added: 1 },
+  { key: 'armor_chest', data: 'armor_chests', label: t('cat.armor_chest'), icon: 'armor_chest', group: t('group.chests'), on: true, added: 1 },
+  // ~1,200 chests: off unless asked for
+  { key: 'treasure_chest', data: 'treasure_chests', label: t('cat.treasure_chest'), icon: 'treasure_chest', group: t('group.chests'), size: 20, added: 1 },
 ];
 const SKY_Y = 750, DEPTHS_Y = -50, SIZE = 1500;
 const POLL_MS = 4000;
@@ -80,6 +150,7 @@ const state = {
   layer: store.get('layer', 'surface'),
   mode: store.get('mode', 'missing'),
   off: new Set(store.get('off', CATS.filter(c => !(REMOTE ? c.phone : c.on)).map(c => c.key))),
+  known: new Set(store.get('known', CATS.filter(c => !c.added).map(c => c.key))),
   search: '',
   lastMtime: null,
   tab: store.get('tab', 'map'),
@@ -89,15 +160,20 @@ const state = {
   quests: null,      // definitions from /data/quests.json
   openQuest: null,
 };
-const QCATS = [
-  ['main', 'Main Quests'], ['side_adventure', 'Side Adventures'], ['side_quest', 'Side Quests'], ['shrine', 'Shrine Quests'],
-];
-const QSTATUS = { active: 'In progress', available: 'Not started', queued: 'Queued', locked: 'Locked', done: 'Done' };
+// Layers added after the legend was saved start the way a new user would see them (most are on, the
+// ~1,200 treasure chests are off), instead of all showing because they aren't in the saved "off" list.
+if (CATS.some(c => !state.known.has(c.key))) {
+  for (const c of CATS) if (!state.known.has(c.key) && !(REMOTE ? c.phone : c.on)) state.off.add(c.key);
+  store.set('off', [...state.off]);
+  store.set('known', CATS.map(c => c.key));
+}
+const QCATS = ['main', 'side_adventure', 'side_quest', 'shrine'].map(k => [k, t('qcat.' + k)]);
+const QSTATUS = Object.fromEntries(['active', 'available', 'queued', 'locked', 'done'].map(k => [k, t('qs.' + k)]));
 
 const $ = s => document.querySelector(s);
 const layerOf = y => (y >= SKY_Y ? 'sky' : y < DEPTHS_Y ? 'depths' : 'surface');
 const toLatLng = p => [-(SIZE / 2 + p.z / 8), SIZE / 2 + p.x / 8];
-const fmtTime = s => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h} h ${m} min` : `${m} min`; };
+const fmtTime = s => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? t('time.hm', { h, m }) : t('time.m', { m }); };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---------- map ----------
@@ -160,12 +236,12 @@ scaleIcons();
 const pathLayer = L.layerGroup().addTo(map);
 const iconCache = {};
 
-function icon(cat, done) {
-  const k = cat.key + (done ? ':d' : '');
+function icon(cat, done, found) {
+  const k = cat.key + (done ? ':d' : found ? ':f' : '');
   if (!iconCache[k]) {
     const s = cat.size || 24;
     iconCache[k] = L.divIcon({
-      className: 'mk' + (done ? ' done' : ''),
+      className: 'mk' + (done ? ' done' : found ? ' found' : ''),
       html: `<img src="${iconSrc(cat.icon)}" alt="">`,
       iconSize: [s, s], iconAnchor: [s / 2, s / 2], popupAnchor: [0, -s / 2],
     });
@@ -173,22 +249,27 @@ function icon(cat, done) {
   return iconCache[k];
 }
 
-const SINGULAR = {
-  hidden_korok: 'Korok seed', carry_korok: 'Korok friends', hinox: 'Hinox', talus: 'Talus', molduga: 'Molduga',
-  flux_construct: 'Flux Construct', frox: 'Frox', gleeok: 'Gleeok', sages_will: "Sage's Will", old_map: 'Old map',
-  addison_sign: "Addison's sign",
-};
+// one of a kind, for names of markers without one of their own (Korok seed: Lift the rock, ...)
+const SINGULAR = Object.fromEntries(['hidden_korok', 'carry_korok', 'hinox', 'talus', 'molduga', 'flux_construct', 'frox',
+  'gleeok', 'sages_will', 'old_map', 'addison_sign', 'lynel', 'armor_chest', 'treasure_chest'].map(k => [k, t('one.' + k)]));
+// what "done" means, per layer (default: Done / Not yet)
+const DONE_WORDS = Object.fromEntries(['skyview_tower', 'great_fairy', 'armor_chest', 'treasure_chest', 'dragon_tear']
+  .map(k => [k, [t(`done.${k}.yes`), t(`done.${k}.no`)]]));
 function objName(cat, o) {
-  if (o.display_name) return o.display_name;
+  if (o.display_name) return tData(o.display_name);
   const one = SINGULAR[cat.key] || cat.label;
-  return o.type ? `${one}: ${o.type}` : one;
+  return o.type ? t('name.typed', { name: one, type: tData(o.type) }) : one;
 }
 
-function popupHtml(cat, o, done) {
+function popupHtml(cat, o, done, found) {
   const p = o.position;
+  const [yes, no] = DONE_WORDS[cat.key] || [t('done.yes'), t('done.no')];
+  const status = cat.track === false
+    ? `<div class="row">${esc(t('pop.lynel'))}</div>`
+    : `<div class="row">${esc(t('pop.status'))} <span class="st ${done ? 'yes' : found ? 'found' : 'no'}">${esc(done ? yes : found ? t('pop.found') : no)}</span></div>`;
   return `<div class="pop"><h3>${esc(objName(cat, o))}</h3>
-    <div class="row">${esc(cat.label)} · ${layerOf(p.y)}</div>
-    <div class="row">Status: <span class="st ${done ? 'yes' : 'no'}">${done ? 'Done' : 'Not yet'}</span></div>
+    <div class="row">${esc(cat.label)} · ${esc(layerName(layerOf(p.y)))}</div>
+    ${status}
     <div class="row">x ${Math.round(p.x)} · y ${Math.round(p.y)} · z ${Math.round(p.z)}</div></div>`;
 }
 
@@ -199,18 +280,21 @@ function render() {
   if (!state.data) return;
   const q = state.tab === 'map' ? state.search.trim().toLowerCase() : '';
   const done = state.progress ? state.progress.done : {};
+  const foundAll = (state.progress && state.progress.found) || {};
   for (const cat of CATS) {
     if (state.off.has(cat.key)) continue;
     const list = state.data[cat.data] || [];
     const flags = done[cat.key] || [];
+    const found = foundAll[cat.key] || [];
     list.forEach((o, i) => {
       const isDone = !!flags[i];
+      const isFound = !isDone && !!found[i];
       if (state.mode === 'missing' && isDone) return;
       if (state.mode === 'done' && !isDone) return;
       if (layerOf(o.position.y) !== state.layer) return;
       if (q && !(objName(cat, o).toLowerCase().includes(q))) return;
-      const m = L.marker(toLatLng(o.position), { icon: icon(cat, isDone), riseOnHover: true, keyboard: false });
-      m.bindPopup(() => popupHtml(cat, o, isDone));
+      const m = L.marker(toLatLng(o.position), { icon: icon(cat, isDone, isFound), riseOnHover: true, keyboard: false });
+      m.bindPopup(() => popupHtml(cat, o, isDone, isFound));
       markerLayer.addLayer(m);
       const path = o.path && (o.path.flowers ? o.path.flowers.map(f => f.position) : o.path.start && [o.path.start, o.path.end]);
       if (path && !isDone) {
@@ -237,9 +321,9 @@ function renderPlayer() {
       iconSize: [s, s], iconAnchor: [s / 2, s / 2], popupAnchor: [0, -s / 2] }),
     zIndexOffset: 10000, keyboard: false,
   });
-  const when = state.progress.mtime ? new Date(state.progress.mtime * 1000).toLocaleString() : '';
-  playerMarker.bindPopup(`<div class="pop"><h3>Link</h3><div class="row">Where you were at the last save · ${layerOf(p.y)}</div>
-    ${when ? `<div class="row">Saved ${esc(when)}</div>` : ''}<div class="row">x ${Math.round(p.x)} · y ${Math.round(p.y)} · z ${Math.round(p.z)}</div></div>`);
+  const when = state.progress.mtime ? new Date(state.progress.mtime * 1000).toLocaleString(LOCALE) : '';
+  playerMarker.bindPopup(`<div class="pop"><h3>${esc(t('link'))}</h3><div class="row">${esc(t('player.where'))} · ${esc(layerName(layerOf(p.y)))}</div>
+    ${when ? `<div class="row">${esc(t('player.saved', { when }))}</div>` : ''}<div class="row">x ${Math.round(p.x)} · y ${Math.round(p.y)} · z ${Math.round(p.z)}</div></div>`);
   playerLayer.addLayer(playerMarker);
 }
 
@@ -254,8 +338,10 @@ function renderLegend() {
     const n = (done[cat.key] || []).filter(Boolean).length;
     const b = document.createElement('button');
     b.className = 'cat' + (state.off.has(cat.key) ? ' off' : '') + (total && n === total ? ' complete' : '');
-    b.title = state.off.has(cat.key) ? 'Show on map' : 'Hide from map';
-    b.innerHTML = `<img src="${iconSrc(cat.icon)}" alt=""><span>${esc(cat.label)}</span><span class="n">${n} / ${total}</span>
+    b.title = state.off.has(cat.key) ? t('legend.show') : t('legend.hide');
+    b.innerHTML = cat.track === false
+      ? `<img src="${iconSrc(cat.icon)}" alt=""><span>${esc(cat.label)}</span><span class="n">${total}</span>`
+      : `<img src="${iconSrc(cat.icon)}" alt=""><span>${esc(cat.label)}</span><span class="n">${n} / ${total}</span>
       <span class="bar"><i style="width:${total ? (100 * n / total).toFixed(1) : 0}%"></i></span>`;
     b.onclick = () => { state.off.has(cat.key) ? state.off.delete(cat.key) : state.off.add(cat.key); store.set('off', [...state.off]); renderLegend(); render(); };
     el.appendChild(b);
@@ -265,11 +351,14 @@ function renderLegend() {
 function renderSummary() {
   const d = state.progress ? state.progress.done : {};
   const cnt = k => (d[k] || []).filter(Boolean).length;
+  const all = k => ((state.data && state.data[k]) || []).length;
   const items = [
-    ['Korok seeds', cnt('hidden_korok') + cnt('carry_korok'), 900],
-    ['Shrines', cnt('shrine'), 152],
-    ['Lightroots', cnt('lightroot'), 120],
-    ['Play time', state.progress ? fmtTime(state.progress.playtime) : '–', null],
+    [t('sum.korokSeeds'), cnt('hidden_korok') + cnt('carry_korok'), 900],
+    [t('cat.shrine'), cnt('shrine'), 152],
+    [t('cat.lightroot'), cnt('lightroot'), 120],
+    [t('cat.skyview_tower'), cnt('skyview_tower'), all('skyview_towers') || 15],
+    [t('cat.dragon_tear'), cnt('dragon_tear'), all('dragon_tears') || 12],
+    [t('sum.playtime'), state.progress ? fmtTime(state.progress.playtime) : '–', null],
   ];
   $('#summary').innerHTML = items.map(([l, n, t]) =>
     `<div class="big"><b>${t == null ? esc(n) : `${n}<small style="color:var(--muted);font-size:12px"> / ${t}</small>`}</b><span>${esc(l)}</span></div>`).join('');
@@ -292,7 +381,9 @@ const humanize = s => s.replace(/_/g, ' ').replace(/([a-z])([A-Z0-9])/g, '$1 $2'
 
 const questName = id => (state.quests.find(q => q.id === id) || {}).name || humanize(id);
 const startPoints = q => (q.start && q.start.points) || [];
-const whoWhere = q => [q.giver && `talk to ${q.giver}`, q.region && `in ${q.region}`].filter(Boolean).join(' ');
+// "To start: talk to <giver> in <region>." (either part may be missing)
+const startText = q => (q.giver && q.region ? t('quest.startBoth', { who: q.giver, region: q.region })
+  : q.giver ? t('quest.startWho', { who: q.giver }) : q.region ? t('quest.startWhere', { region: q.region }) : '');
 
 function questText(q) {
   const [st, step] = qStatus(q);
@@ -301,41 +392,41 @@ function questText(q) {
     const needs = ((q.requires && q.requires.quests) || []).filter(id => id !== q.id)
       .filter(id => { const s = state.quests.find(x => x.id === id); return !s || qStatus(s)[0] !== 'done'; });
     return {
-      label: 'Locked',
-      need: needs.length ? `Unlocks after progressing: ${needs.map(questName).join(', ')}.` : 'Unlocks later in the story.',
-      points: sp, goto: sp.length ? (approx ? 'Show area on map' : 'Show quest giver on map') : '', kind: 'start',
+      label: t('qs.locked'),
+      need: needs.length ? t('quest.needs', { list: needs.map(questName).join(t('list.sep')) }) : t('quest.later'),
+      points: sp, goto: sp.length ? (approx ? t('goto.area') : t('goto.giver')) : '', kind: 'start',
     };
   }
   if (st === 'queued') {
     return {
-      label: 'Queued',
-      need: `${q.giver || 'The quest giver'} offers this after “${questName(q.after)}”.`,
-      points: sp, goto: sp.length ? (approx ? 'Show area on map' : 'Show quest giver on map') : '', kind: 'start',
+      label: t('qs.queued'),
+      need: t('quest.queuedBy', { who: q.giver || t('quest.theGiver'), quest: questName(q.after) }),
+      points: sp, goto: sp.length ? (approx ? t('goto.area') : t('goto.giver')) : '', kind: 'start',
     };
   }
   if (st === 'available') {
     return {
-      label: q.category === 'main' ? 'Not started · comes with the story' : 'Not started',
-      need: whoWhere(q) ? `To start: ${whoWhere(q)}.` : '',
-      hint: q.category === 'main' ? '' : 'Some quests only appear once their character shows up after story events.',
-      points: sp, goto: sp.length ? (approx ? 'Show start area on map' : 'Show quest giver on map') : '', kind: 'start',
+      label: q.category === 'main' ? t('quest.mainNotStarted') : t('qs.available'),
+      need: startText(q),
+      hint: q.category === 'main' ? '' : t('quest.appearHint'),
+      points: sp, goto: sp.length ? (approx ? t('goto.startArea') : t('goto.giver')) : '', kind: 'start',
     };
   }
   const s = qStep(q, step);
-  if (st === 'done') return { label: 'Completed', text: s ? s.text : '' };
+  if (st === 'done') return { label: t('quest.completed'), text: s ? s.text : '' };
   const pts = s ? s.points : [];
-  return { label: `Current step: ${humanize(step)}`, text: (s && s.text) || '', points: pts, goto: pts.length ? 'Show on map' : '', kind: 'target' };
+  return { label: t('quest.current', { step: humanize(step) }), text: (s && s.text) || '', points: pts, goto: pts.length ? t('goto.step') : '', kind: 'target' };
 }
 
 function renderQuests() {
   const el = $('#quests');
-  if (!state.quests) { el.innerHTML = '<div class="empty">Quest data not built yet. Run <code>python build_quests.py</code> and restart.</div>'; return; }
+  if (!state.quests) { el.innerHTML = `<div class="empty">${t('quests.noData')}</div>`; return; }
   const q = state.search.trim().toLowerCase();
   const counts = { active: 0, available: 0, queued: 0, done: 0, locked: 0 };
   for (const x of state.quests) counts[qStatus(x)[0]]++;
-  $('#qsummary').innerHTML = [['In progress', counts.active], ['Done', `${counts.done}<small style="color:var(--muted);font-size:12px"> / ${state.quests.length}</small>`],
-    ['Ready to start', counts.available], ['Queued / locked', `${counts.queued + counts.locked}`]]
-    .map(([l, n]) => `<div class="big"><b>${n}</b><span>${l}</span></div>`).join('');
+  $('#qsummary').innerHTML = [[t('qs.active'), counts.active], [t('qs.done'), `${counts.done}<small style="color:var(--muted);font-size:12px"> / ${state.quests.length}</small>`],
+    [t('qsum.ready'), counts.available], [t('qsum.waiting'), `${counts.queued + counts.locked}`]]
+    .map(([l, n]) => `<div class="big"><b>${n}</b><span>${esc(l)}</span></div>`).join('');
   const open = store.get('qopen', { main: true, side_adventure: true, side_quest: true, shrine: true });
   let html = '', shown = 0;
   for (const [cat, label] of QCATS) {
@@ -350,7 +441,7 @@ function renderQuests() {
     if (!list.length) continue;
     shown += list.length;
     const done = all.filter(x => qStatus(x)[0] === 'done').length;
-    html += `<details class="qgroup" data-cat="${cat}" ${open[cat] !== false ? 'open' : ''}><summary>${esc(label)}<span class="n">${done} / ${all.length} done</span></summary>`;
+    html += `<details class="qgroup" data-cat="${cat}" ${open[cat] !== false ? 'open' : ''}><summary>${esc(label)}<span class="n">${esc(t('quests.groupDone', { done, all: all.length }))}</span></summary>`;
     for (const x of list) {
       const [st] = qStatus(x);
       const t = questText(x);
@@ -364,7 +455,7 @@ function renderQuests() {
     }
     html += '</details>';
   }
-  el.innerHTML = shown ? html : `<div class="empty">No quests here${q ? ' matching the search' : ''}.</div>`;
+  el.innerHTML = shown ? html : `<div class="empty">${esc(q ? t('quests.noneSearch') : t('quests.none'))}</div>`;
 }
 
 function renderQuestTargets(focusId) {
@@ -378,7 +469,7 @@ function renderQuestTargets(focusId) {
       for (const p of (s ? s.points : [])) {
         if (layerOf(p[1]) !== state.layer) continue;
         const m = L.marker(ptLatLng(p), { icon: L.divIcon({ className: 'qmk' + (focus ? ' focus' : ''), iconSize: [26, 26] }), zIndexOffset: 1000 });
-        m.bindPopup(`<div class="pop"><h3>${esc(x.name)}</h3><div class="row">Current step: ${esc(humanize(step))}</div>
+        m.bindPopup(`<div class="pop"><h3>${esc(x.name)}</h3><div class="row">${esc(t('quest.current', { step: humanize(step) }))}</div>
           <div class="row">${esc([x.giver, x.region].filter(Boolean).join(' · '))}</div></div>`);
         questLayer.addLayer(m);
       }
@@ -389,7 +480,7 @@ function renderQuestTargets(focusId) {
         const m = L.marker(ptLatLng(p), { icon: L.divIcon({ className: 'smk' + (approx ? ' approx' : '') + (focus ? ' focus' : ''), html: '!', iconSize: [22, 22] }), zIndexOffset: 900 });
         m.bindPopup(`<div class="pop"><h3>${esc(x.name)}</h3>
           <div class="row">${QSTATUS[st]}${x.giver ? ` · ${esc(x.giver)}` : ''}${x.region ? ` · ${esc(x.region)}` : ''}</div>
-          <div class="row">${approx ? 'Approximate area (first step of the quest)' : 'Where the quest giver stands (may move during the day)'}</div></div>`);
+          <div class="row">${esc(approx ? t('quest.approx') : t('quest.giverSpot'))}</div></div>`);
         questLayer.addLayer(m);
       }
     }
@@ -423,7 +514,7 @@ function setTab(tab) {
   state.tab = tab; store.set('tab', tab);
   document.body.classList.toggle('tab-quests', tab === 'quests');
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-  $('#search').placeholder = tab === 'quests' ? 'Search quests, people, places…' : 'Search names…';
+  $('#search').placeholder = tab === 'quests' ? t('search.quests') : t('search.map');
   $('#search').value = '';
   state.search = '';
   render();
@@ -444,8 +535,9 @@ async function loadSlots() {
   const s = await getJSON('/api/slots');
   const sel = $('#slot');
   const cur = state.slot;
-  sel.innerHTML = `<option value="latest">Latest save (slot ${s.latest ?? '–'})</option>` +
-    s.slots.map(x => `<option value="${x.slot}" ${x.error ? 'disabled' : ''}>Slot ${x.slot} · ${x.error ? 'unreadable' : fmtTime(x.playtime)} · ${new Date(x.mtime * 1000).toLocaleString()}</option>`).join('');
+  sel.innerHTML = `<option value="latest">${esc(t('slot.latest', { n: s.latest ?? '–' }))}</option>` +
+    s.slots.map(x => `<option value="${x.slot}" ${x.error ? 'disabled' : ''}>${esc(t('slot.item', { n: x.slot,
+      info: x.error ? t('slot.unreadable') : fmtTime(x.playtime), date: new Date(x.mtime * 1000).toLocaleString(LOCALE) }))}</option>`).join('');
   sel.value = [...sel.options].some(o => o.value === String(cur)) ? String(cur) : 'latest';
   state.slot = sel.value;
   return s;
@@ -456,7 +548,7 @@ async function loadProgress() {
   state.progress = p;
   state.lastMtime = p.mtime;
   renderSummary(); renderLegend(); render(); renderQuests(); renderQuestTargets();
-  setStatus(`Live · slot ${p.slot} · saved ${new Date(p.mtime * 1000).toLocaleTimeString()}`, 'live');
+  setStatus(t('status.live', { n: p.slot, time: new Date(p.mtime * 1000).toLocaleTimeString(LOCALE) }), 'live');
 }
 
 async function poll() {
@@ -468,14 +560,14 @@ async function poll() {
     if (info && (info.mtime !== state.lastMtime || !state.progress || state.progress.slot !== slotNo)) await loadProgress();
     // background update of the map data (e.g. first start after an app update)
     if (s.job && s.job.upgrade) {
-      if (s.job.running) setStatus(`${s.job.message} ${Math.round(s.job.progress * 100)}%`);
+      if (s.job.running) setStatus(`${tMsg(s.job.message)} ${Math.round(s.job.progress * 100)}%`);
       else if (state.upgrading && s.job.done) { location.reload(); return; }
       state.upgrading = s.job.running;
     }
   } catch (e) {
-    if (e instanceof TypeError) setStatus('The app is not running. Open TotKProgressMap again, then refresh this page.', 'err');
-    else if (/setup required/.test(e.message)) { again = false; setStatus('Setup needed'); openSetup(true); }
-    else setStatus('Cannot read save: ' + e.message, 'err');
+    if (e instanceof TypeError) setStatus(t('status.notRunning'), 'err');
+    else if (/setup required/.test(e.message)) { again = false; setStatus(t('status.setup')); openSetup(true); }
+    else setStatus(t('status.cannotRead', { error: tMsg(e.message) }), 'err');
   } finally {
     if (again) setTimeout(poll, POLL_MS);
   }
@@ -509,7 +601,7 @@ document.querySelectorAll('#mode button').forEach(b => {
     render();
   };
 });
-$('#slot').onchange = e => { state.slot = e.target.value; store.set('slot', state.slot); loadProgress().catch(err => setStatus(err.message, 'err')); };
+$('#slot').onchange = e => { state.slot = e.target.value; store.set('slot', state.slot); loadProgress().catch(err => setStatus(tMsg(err.message), 'err')); };
 let searchTimer;
 $('#search').oninput = e => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.search = e.target.value; render(); renderQuests(); }, 150); };
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
@@ -542,26 +634,13 @@ async function post(url, body) {
   return j;
 }
 
-const setup = { selected: null, candidates: [], firstRun: false, polling: null, gameExe: 'totk.exe' };
-
-// The page's texts name Windows things (totk.exe, the Windows firewall prompt); on Linux the app says
-// which game binary and firewall hint apply (/api/setup: game_exe, platform).
-function applyPlatform(st) {
-  if (!st.platform) return;
-  setup.gameExe = st.game_exe || setup.gameExe;
-  document.querySelectorAll('.game-exe').forEach(el => { el.textContent = setup.gameExe; });
-  if (st.platform !== 'windows') {
-    document.querySelectorAll('.fw-note').forEach(el => {
-      el.textContent = `If it doesn't open, allow port ${location.port || 80} in this PC's firewall.`;
-    });
-  }
-}
+const setup = { selected: null, candidates: [], firstRun: false, polling: null };
 
 function badgeHtml(info) {
   const b = [];
-  b.push(info.exe || info.game ? '<span class="badge ok">TotK Recomp</span>' : '<span class="badge warn">Save folder only</span>');
-  b.push(info.slots ? `<span class="badge ok">${info.slots} save slot${info.slots === 1 ? '' : 's'}</span>` : '<span class="badge warn">No saves yet</span>');
-  b.push(info.game ? '<span class="badge ok">Quests available</span>' : '<span class="badge warn">No quest data</span>');
+  b.push(info.exe || info.game ? '<span class="badge ok">TotK Recomp</span>' : `<span class="badge warn">${esc(t('badge.saveOnly'))}</span>`);
+  b.push(info.slots ? `<span class="badge ok">${esc(tn('badge.slots', info.slots))}</span>` : `<span class="badge warn">${esc(t('badge.noSaves'))}</span>`);
+  b.push(info.game ? `<span class="badge ok">${esc(t('badge.quests'))}</span>` : `<span class="badge warn">${esc(t('badge.noQuests'))}</span>`);
   return `<div class="badges">${b.join('')}</div>`;
 }
 
@@ -570,7 +649,7 @@ function renderCandidates() {
   const list = [...setup.candidates];
   if (setup.selected && !list.some(c => c.path.toLowerCase() === setup.selected.path.toLowerCase())) list.unshift(setup.selected);
   if (!list.length) {
-    el.innerHTML = '<div class="muted">No TotK Recomp folder found automatically. Click <b>Browse…</b> and pick the folder that has <code>' + setup.gameExe + '</code>.</div>';
+    el.innerHTML = `<div class="muted">${t('setup.noneFound')}</div>`;
   } else {
     el.innerHTML = list.map((c, i) => `<button class="cand ${setup.selected && setup.selected.path === c.path ? 'sel' : ''}" data-i="${i}">
       <span class="radio"></span><span><div class="p">${esc(c.path)}</div>${badgeHtml(c)}</span></button>`).join('');
@@ -583,7 +662,7 @@ function selectFolder(info) {
   renderCandidates();
   const ch = $('#choice');
   ch.hidden = !(info && info.notes && info.notes.length);
-  ch.innerHTML = info && info.notes ? info.notes.map(n => `<div class="note">${esc(n)}</div>`).join('') : '';
+  ch.innerHTML = info && info.notes ? info.notes.map(n => `<div class="note">${esc(tMsg(n))}</div>`).join('') : '';
   $('#setup-go').disabled = !(info && info.ok);
 }
 
@@ -596,18 +675,18 @@ function renderLan(st) {
   $('#share-qr').innerHTML = st.qr || '';
   $('#share-url').textContent = st.url || '';
   $('#share-msg').hidden = !st.error;
-  $('#share-msg').textContent = st.error || '';
+  $('#share-msg').textContent = tMsg(st.error) || '';
   $('#lan-on').checked = !!st.enabled;
   $('#lan-box').hidden = !st.enabled;
   $('#lan-qr').innerHTML = st.qr || '';
   $('#lan-url').textContent = st.url || '';
   $('#lan-msg').hidden = !st.error;
-  $('#lan-msg').textContent = st.error || '';
+  $('#lan-msg').textContent = tMsg(st.error) || '';
 }
 async function setLan(enabled) {
   const btn = enabled ? $('#share-on') : $('#share-stop'), label = btn.textContent;
   btn.disabled = true;
-  btn.textContent = enabled ? 'Turning on…' : 'Turning off…';
+  btn.textContent = enabled ? t('share.turningOn') : t('share.turningOff');
   try { renderLan(await post('/api/lan', { enabled })); }
   catch (err) { renderLan({ enabled: false, error: err.message }); }
   finally { btn.disabled = false; btn.textContent = label; }
@@ -630,34 +709,58 @@ async function openSetup(firstRun) {
   setup.firstRun = firstRun;
   $('#setup').hidden = false;
   $('#setup-close').hidden = firstRun;
-  $('#setup-go').textContent = firstRun ? 'Set up' : 'Save';
-  $('#setup-title').textContent = firstRun ? 'Set up TotK Progress Map' : 'Settings';
+  $('#setup-go').textContent = firstRun ? t('setup.go') : t('setup.save');
+  $('#setup-title').textContent = firstRun ? t('setup.title') : t('settings');
   $('#setup-error').hidden = true;
   $('#job').hidden = true;
-  $('#cands').innerHTML = '<div class="muted">Looking for your game…</div>';
+  $('#cands').innerHTML = `<div class="muted">${esc(t('setup.looking'))}</div>`;
+  const dataNote = dir => { $('#data-note').innerHTML = t('setup.dataNote', { dir: `<code id="data-dir">${esc(dir)}</code>` }); };
+  dataNote('');
   try {
     const st = await getJSON('/api/setup?scan=1');
-    applyPlatform(st);
-    $('#data-dir').textContent = st.data_dir;
-    $('#setup-foot').textContent = `Version ${st.version}` + (st.install ? ` · current folder: ${st.install.path}` : '');
+    dataNote(st.data_dir);
+    $('#setup-foot').textContent = t('setup.version', { v: st.version }) + (st.install ? t('setup.folder', { path: st.install.path }) : '');
     setup.candidates = st.candidates || [];
     setup.current = st.ready && st.install ? st.install.path : null;
     $('#lan-step').hidden = firstRun;
     if (!firstRun) getJSON('/api/lan').then(renderLan).catch(() => {});
+    renderLang(st.lang);
     selectFolder(st.install && st.install.ok ? st.install : (setup.candidates[0] || null));
     if (st.job.running) watchJob();
   } catch (e) {
-    $('#cands').innerHTML = `<div class="err">${esc(e.message)}</div>`;
+    $('#cands').innerHTML = `<div class="err">${esc(tMsg(e.message))}</div>`;
   }
 }
 
+// Language of the game text (names, quests): built from the game files in that language.
+function renderLang(l) {
+  if (!l) return;
+  const name = code => (l.options.find(o => o[0] === code) || [code, code])[1];
+  $('#lang-sel').innerHTML = [`<option value="auto">${esc(t('lang.auto', { name: name(l.game) }))}</option>`,
+    ...l.options.map(([code, label]) => `<option value="${esc(code)}">${esc(label)}</option>`)].join('');
+  $('#lang-sel').value = l.setting;
+  $('#lang-msg').hidden = true;
+}
+$('#lang-sel').onchange = async e => {
+  $('#lang-msg').hidden = true;
+  try {
+    await post('/api/lang', { lang: e.target.value });
+    const st = await getJSON('/api/setup');
+    if (st.job.running) watchJob();   // rebuilding names and quests in the new language, then reloads
+    else if (st.lang && st.lang.effective !== I18N.lang) location.reload();   // nothing to rebuild (e.g. not set up yet)
+  } catch (err) {
+    $('#lang-msg').hidden = false;
+    $('#lang-msg').textContent = tMsg(err.message);
+  }
+};
+
 $('#browse').onclick = async () => {
-  $('#browse-note').textContent = 'A folder window opened, it may be behind this browser…';
+  $('#browse-note').textContent = t('setup.browseNote');
   try {
     const r = await post('/api/setup/browse', { initial: setup.selected && setup.selected.path });
     if (r.info) selectFolder(r.info);
   } catch (e) {
-    $('#browse-note').textContent = e.message;
+    $('#browse-note').textContent = tMsg(e.message);
     return;
   }
   $('#browse-note').textContent = '';
@@ -672,16 +775,16 @@ function watchJob() {
     try { st = await getJSON('/api/setup'); } catch { return; }
     const j = st.job;
     $('#job-bar').style.width = `${Math.round(j.progress * 100)}%`;
-    $('#job-msg').textContent = j.message || '';
+    $('#job-msg').textContent = tMsg(j.message) || '';
     if (j.running) return;
     clearInterval(setup.polling);
     if (j.error) {
       $('#setup-error').hidden = false;
-      $('#setup-error').textContent = j.error;
+      $('#setup-error').textContent = tMsg(j.error);
       $('#setup-go').disabled = false;
-      $('#setup-go').textContent = 'Try again';
+      $('#setup-go').textContent = t('setup.retry');
     } else if (j.done) {
-      $('#job-msg').textContent = j.warning ? `Ready. ${j.warning}` : 'Ready! Loading your map…';
+      $('#job-msg').textContent = j.warning ? t('setup.readyWarn', { warning: tMsg(j.warning) }) : t('setup.ready');
       setTimeout(() => location.reload(), j.warning ? 2500 : 700);
     }
   }, 500);
@@ -697,7 +800,7 @@ $('#setup-go').onclick = async () => {
     watchJob();
   } catch (e) {
     $('#setup-error').hidden = false;
-    $('#setup-error').textContent = e.message;
+    $('#setup-error').textContent = tMsg(e.message);
   }
 };
 $('#setup-close').onclick = () => { $('#setup').hidden = true; };
@@ -711,15 +814,14 @@ $('#open-browser').hidden = !IN_APP;
 $('#open-browser').onclick = () => post('/api/open-browser').catch(() => {});
 $('#quit').onclick = async () => {
   try { await post('/api/quit'); } catch {}
-  document.body.insertAdjacentHTML('beforeend', '<div class="bye"><div><h2>TotK Progress Map stopped.</h2><p>You can close this tab. Open the app again any time to see your progress.</p></div></div>');
+  document.body.insertAdjacentHTML('beforeend', `<div class="bye"><div><h2>${esc(t('bye.title'))}</h2><p>${esc(t('bye.text'))}</p></div></div>`);
 };
 
 (async function init() {
   try {
     const st = await getJSON('/api/setup');
-    applyPlatform(st);
-    if (!st.ready && REMOTE) { setStatus("The app on your PC is not set up yet. Finish the setup there first.", 'err'); return; }
-    if (!st.ready) { setStatus('Setup needed'); await openSetup(true); return; }
+    if (!st.ready && REMOTE) { setStatus(t('status.remoteNotSetUp'), 'err'); return; }
+    if (!st.ready) { setStatus(t('status.setup')); await openSetup(true); return; }
     await setupBaseMaps();
     state.data = await getJSON('/data/map_data.json');
     try { state.quests = (await getJSON('/data/quests.json')).quests; } catch { state.quests = null; }
@@ -729,7 +831,7 @@ $('#quit').onclick = async () => {
     await loadSlots();
     await loadProgress();
   } catch (e) {
-    setStatus('Error: ' + e.message, 'err');
+    setStatus(t('status.error', { error: tMsg(e.message) }), 'err');
   }
   setTimeout(poll, POLL_MS);
 })();

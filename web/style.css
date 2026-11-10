@@ -31,7 +31,7 @@ h1 { font-size: 18px; margin: 0; letter-spacing: .02em; color: var(--gold); font
 .status.err { color: #ff8a7a; }
 
 .controls { padding: 12px 16px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
-.field { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 8px; color: var(--muted); }
+.field { display: grid; grid-template-columns: minmax(44px, max-content) 1fr; align-items: center; gap: 8px; color: var(--muted); }
 select, input[type=search] {
   width: 100%; background: var(--panel-2); color: var(--text);
   border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: inherit;
@@ -63,7 +63,7 @@ select, input[type=search] {
 .cat.complete .n { color: var(--done); }
 
 .panel-foot { padding: 10px 16px; border-top: 1px solid var(--line); display: flex; gap: 12px; align-items: center; }
-.link { background: none; border: 0; padding: 0; color: var(--accent); }
+.link { background: none; border: 0; padding: 0; color: var(--accent); white-space: nowrap; }
 .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
 
 #main { flex: 1; position: relative; height: 100%; }
@@ -96,6 +96,12 @@ select, input[type=search] {
   font-size: 9px; line-height: 12px; text-align: center; border-radius: 50%;
   background: var(--done); color: #0b1a0b; font-weight: 700;
 }
+/* shrine found (door opened / entered) but not finished */
+.mk.found::after {
+  content: "…"; position: absolute; right: -4px; bottom: -4px; width: 12px; height: 12px;
+  font-size: 10px; line-height: 8px; text-align: center; border-radius: 50%;
+  background: #6fd3c2; color: #0b1a0b; font-weight: 700;
+}
 .loc-label { color: #fff; font-size: 11px; white-space: nowrap; text-shadow: 0 0 3px #000, 0 0 2px #000;
   pointer-events: none; transform: translate(-50%, -50%); width: auto !important; height: auto !important; }
 
@@ -107,6 +113,7 @@ select, input[type=search] {
 .pop .st { font-weight: 600; }
 .pop .st.yes { color: var(--done); }
 .pop .st.no { color: #ff9f8a; }
+.pop .st.found { color: #6fd3c2; }
 .leaflet-control-zoom a { background: var(--panel) !important; color: var(--text) !important; border-color: var(--line) !important; }
 
 /* settings / setup */
@@ -217,9 +224,13 @@ body:not(.tab-quests) .view-quests, body.tab-quests .view-map { display: none !i
   #main { position: fixed; inset: 0; }
   .panel-toggle { display: block; position: absolute; z-index: 950; top: 12px; left: 12px;
     background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
-  .layers { top: 56px; }
-  .layers button { padding: 6px 10px; }
+  /* longer layer names (e.g. Russian, German) scroll inside the bar rather than off the screen */
+  .layers { top: 56px; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
+  .layers button { padding: 6px 10px; white-space: nowrap; flex: none; }
   .leaflet-control-zoom { display: none; }   /* pinch to zoom; frees the corner for the panel button */
+}
+@media (max-width: 420px) {
+  .layers button { padding: 6px 7px; gap: 4px; }
 }
 
 /* settings: open on your phone */
@@ -229,7 +240,7 @@ body:not(.tab-quests) .view-quests, body.tab-quests .view-map { display: none !i
 .lan-box { display: flex; gap: 14px; align-items: center; margin-top: 8px; }
 .lan-qr svg { display: block; border-radius: 6px; }
 .lan-box code { display: inline-block; margin-top: 4px; font-size: 14px; user-select: all; }
-.icon-btn[hidden] { display: none; }
+.icon-btn[hidden], .lan-box[hidden] { display: none; }
 
 /* floating "open on your phone" button + popup (bottom right of the map) */
 .share-btn { position: absolute; right: 18px; bottom: 18px; z-index: 900; width: 46px; height: 46px; border-radius: 50%;
@@ -251,3 +262,4 @@ body:not(.tab-quests) .view-quests, body.tab-quests .view-map { display: none !i
 .share-pop code { font-size: 14px; user-select: all; }
 .share-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 2px; }
 .share-foot .btn { white-space: nowrap; flex: none; }
+.setup .lang-sel { width: 100%; max-width: 340px; margin-bottom: 6px; }

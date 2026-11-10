@@ -19,7 +19,7 @@ import gamefiles
 import maptiles
 from paths import ASSETS
 
-VERSION = 2  # bump when the icon set or its drawing changes: the app then rebuilds it
+VERSION = 3  # bump when the icon set or its drawing changes: the app then rebuilds it
 SIZE = 96  # output px; markers are drawn at 20-24 css px, so this stays sharp on high-dpi screens
 
 # name: (kind, source, colour)
@@ -47,6 +47,12 @@ RECIPES = {
     'old_map': ('item', 'Obj_TreasureMap_00', None),
     'schema_stone': ('item', 'Obj_AutoBuilderDraft_00', None),
     'yiga_schematic': ('item', 'Obj_AutoBuilderDraftAssassin_00', None),
+    'skyview_tower': ('mask', 'MapIconTower_00^s', (120, 215, 255)),
+    'great_fairy': ('ui', 'MapIconFairy_72x72^w', None),
+    'lynel': ('photo', 'Enemy_Lynel_Middle', None),
+    'dragon_tear': ('mask', 'MapIconDragonTears_00^s', (150, 240, 190)),
+    'armor_chest': ('ui', 'MapIconShopArmor_58x58^w', None),
+    'treasure_chest': ('ui', 'MapIconTreasureBox_72x72^w', None),
     'player': ('mask', 'Nt_MapPlayerIconNew_00^s', (255, 214, 64)),
     'sky': ('mask', 'MapTabIcon_Sky^s', (255, 255, 255)),
     'surface': ('mask', 'MapTabIcon_Ground^s', (255, 255, 255)),

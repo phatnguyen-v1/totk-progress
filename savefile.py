@@ -13,7 +13,8 @@ TABLE_START = 0x28
 SAVE_TYPE_HASH = 0xA3DB7114   # MetaData.SaveTypeHash: end of the hash table
 PLAYTIME_HASH = 0xE573F564
 STATUS_CLEAR = 1654019904     # 'Clear': shrine done, Korok friends reunited
-STATUS_OPEN = 404286466       # 'Open': lightroot activated
+STATUS_OPEN = 404286466       # 'Open': lightroot activated; shrine found (its door opened)
+STATUS_ENTER = 2121473774     # 'Enter': shrine entered, not finished
 
 # category key -> (map_data.json key, how it is completed)
 CATEGORIES = {
@@ -26,17 +27,23 @@ CATEGORIES = {
     'well':           ('wells', 'nonzero'),
     'chasm':          ('chasms', 'nonzero'),
     'location':       ('locations', 'nonzero'),
+    'skyview_tower':  ('skyview_towers', 'nonzero'),
+    'great_fairy':    ('great_fairies', 'nonzero'),
     'hinox':          ('hinoxes', 'nonzero'),
     'talus':          ('taluses', 'nonzero'),
     'molduga':        ('moldugas', 'nonzero'),
     'flux_construct': ('flux_constructs', 'nonzero'),
     'frox':           ('froxes', 'nonzero'),
     'gleeok':         ('gleeoks', 'nonzero'),
+    'lynel':          ('lynels', 'none'),     # not tracked: Lynels come back after a Blood Moon
     'sages_will':     ('sages_wills', 'guid'),
     'old_map':        ('old_maps', 'nonzero'),
     'addison_sign':   ('addison_signposts', 'guid'),
     'schema_stone':   ('schema_stones', 'nonzero'),
     'yiga_schematic': ('yiga_schematics', 'nonzero'),
+    'dragon_tear':    ('dragon_tears', 'nonzero'),
+    'armor_chest':    ('armor_chests', 'guid'),
+    'treasure_chest': ('treasure_chests', 'guid'),
 }
 
 
@@ -251,6 +258,9 @@ def parse(path, map_data):
             if rule == 'guid':
                 flags.append(int(obj['guid_hash']) in guids)
                 continue
+            if rule == 'none':
+                flags.append(False)
+                continue
             status = table.get(obj['completion_hash'])
             if status is None:
                 flags.append(False)
@@ -262,9 +272,13 @@ def parse(path, map_data):
                 flags.append(status != 0)
         done[cat] = flags
 
+    # shrines found (door opened or entered) but not finished yet
+    found = {'shrine': [table.get(o['completion_hash']) in (STATUS_OPEN, STATUS_ENTER) for o in map_data.get('shrines', [])]}
+
     return {
         'version_id': struct.unpack_from('<I', buf, 4)[0],
         'playtime': table.get(PLAYTIME_HASH, 0),
         'player': player_position(buf, table),
         'done': done,
+        'found': found,
     }

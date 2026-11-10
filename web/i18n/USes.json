@@ -1,0 +1,24 @@
+{
+  "_about": "Español (Latinoamérica): solo lo que difiere del español de España (EUes.json), según los textos del juego.",
+  "settings": "Configuración",
+  "legend.hint": "Haz clic en un marcador para ver los detalles",
+  "cat.skyview_tower": "Torres de mapeo",
+  "cat.talus": "Talus",
+  "cat.gleeok": "Gleeoks",
+  "cat.treasure_chest": "Otros cofres de tesoro",
+  "one.talus": "Talus",
+  "one.gleeok": "Gleeok",
+  "one.treasure_chest": "Cofre de tesoro",
+  "share.title": "Abrir en el celular",
+  "share.note": "Solo para celulares y tabletas en la <b>misma red Wi-Fi o red</b> que esta PC. No funciona con datos móviles ni desde otra red.",
+  "share.scan": "Escanéalo con la cámara del celular o abre:",
+  "lan.switch": "Mostrar el mapa en celulares y tabletas",
+  "lan.note": "Solo los dispositivos en la <b>misma red Wi-Fi o red</b> que esta PC pueden abrirlo (no con datos móviles). Solo lectura: ven tu mapa, misiones y progreso, pero no pueden cambiar la configuración ni nada de esta PC. Puede que Windows pregunte una vez si permites la aplicación en redes privadas. También en el botón del celular, abajo a la derecha del mapa.",
+  "lan.scan": "Escanéalo con la cámara de tu celular o abre:",
+  "share.what": "Muestra este mapa, tus misiones y tu progreso en el otro dispositivo, solo lectura: no puede cambiar nada en esta PC.",
+  "status.remoteNotSetUp": "La aplicación de tu PC aún no está configurada. Termina primero la configuración ahí.",
+  "data": {
+    "Treasure chest": "Cofre de tesoro",
+    "Armor": "Vestimenta"
+  }
+}

@@ -4,9 +4,10 @@
 
 A companion app for [TotK Recomp](https://github.com/valentderah/totk-pc-recomp), the native PC port of *Tears of the Kingdom*.
 It reads your save and shows what you have and haven't
-found on the map: Korok seeds (with their puzzle paths), shrines, lightroots, caves, Bubbul frogs,
-wells, chasms, locations, bosses, Sage's Wills, old maps, Addison's signs, schema stones and Yiga
-schematics, on the sky, surface and depths layers. A yellow arrow marks where Link was when the
+found on the map: Korok seeds (with their puzzle paths), shrines (including ones you found but haven't
+finished), lightroots, caves, Bubbul frogs, wells, chasms, locations, Skyview Towers, Great Fairies,
+bosses, Lynels, Sage's Wills, old maps, Addison's signs, schema stones, Yiga schematics, Dragon's Tears,
+armor chests and every other treasure chest (with what's inside), on the sky, surface and depths layers. A yellow arrow marks where Link was when the
 game last saved; the **Link** button at the top jumps there.
 
 The **Quests** tab lists all 253 adventure-log quests (Main Quests, Side Adventures, Side Quests,
@@ -73,11 +74,19 @@ code (also in ⚙). Only phones and tablets on the **same Wi-Fi or network** as 
 over mobile data). They get the same map, read-only: they can't change settings or anything on your PC (Windows
 may ask once to allow the app on private networks). It stays on until you turn it off.
 
-The map starts with a few categories (shrines, lightroots, caves, Bubbul frogs, collectibles) because
-all ~2,000 markers at once are slow; turn on more in the legend. Your choices (legend, filters, layer,
-tab) are saved by the app and kept when you close it. The window uses Microsoft Edge WebView2, which comes with Windows 10 and 11;
+The map starts with a few categories (shrines, lightroots, caves, Bubbul frogs, towers, Great Fairies,
+collectibles, armor chests) because all ~3,500 markers at once are slow; turn on more in the legend. Your choices (legend, filters, layer,
+tab) are saved by the app and kept when you close it.
+
+Place, item and quest names and the quest texts come from your game files, in the language TotK Recomp
+is set to (its `totk.ini`). Pick another of the game's 15 languages in **⚙** → *Language*; the app's own
+interface switches with it. The interface translations (`web/i18n`) are drafts: corrections are welcome as
+pull requests. Game terms in them (Korok seeds, Skyview Towers, quest categories, ...) are taken from the
+game's own text where it has one.
+
+The window uses Microsoft Edge WebView2, which comes with Windows 10 and 11;
 without it the app uses your browser instead and you stop it with **⚙** → *Quit app*.
-Settings and downloaded data are kept in `%LOCALAPPDATA%\TotKProgressMap`; delete that folder to reset.
+Settings and the data built from your game files are kept in `%LOCALAPPDATA%\TotKProgressMap`; delete that folder to reset.
 
 ## Run from source
 
@@ -110,7 +119,10 @@ The map page loads Leaflet from cdnjs, so the browser needs internet.
 - `savefile.py` reads `progress.sav`: a table of `(u32 hash, u32 value)` pairs from offset `0x28`
   up to `MetaData.SaveTypeHash` (`0xa3db7114`), whose value points at a `u64` GUID array.
   An object is done when its completion hash has a non-zero value; shrines and Korok friends need
-  `Clear`, lightroots `Open`. Sage's Wills and Addison's signs are done when their GUID is in the array.
+  `Clear`, lightroots `Open`; a shrine at `Open` or `Enter` is found but not finished. Sage's Wills,
+  Addison's signs and treasure chests are done when their GUID is in the array. Skyview Towers use
+  `IsOpenCannon.<tower>`, Dragon's Tears `Complete_DragonTearsNN`, Great Fairies `IsAppear_DressFairy_NN`.
+  Lynels are only shown, not tracked: their defeat flags reset with every Blood Moon.
 - Quests: the game's Challenge table lists each quest's steps (`Ready`, `Step1`, `Step1a`, …,
   `Complete`) with destination points; the save holds an enum `Step_<quest>` whose value is the
   murmur3 hash of the current step name (`NotReady` = locked, `Ready` = not started). The message

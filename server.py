@@ -24,12 +24,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import gamelang
 import savefile
 from paths import APP_NAME, ASSETS, CONFIG, DATA, FROZEN, GAME_EXE, LOG, VERSION, WEB, WINDOWS
 
 APP_ID = 'totk-progress-map'
 # Bump when build_mapdata's output changes: existing installs then rebuild the map data (not the tiles).
-DATA_VERSION = 4
+DATA_VERSION = 5
 
 
 def have_assets():
@@ -51,6 +52,60 @@ def built_version():
         return json.loads((ASSETS / 'source.json').read_text(encoding='utf-8')).get('data_version', 1)
     except (OSError, ValueError):
         return None
+
+
+def built_lang():
+    """Language the map data and quests were built in (versions before 1.6 always built English)."""
+    try:
+        return json.loads((ASSETS / 'source.json').read_text(encoding='utf-8')).get('lang', gamelang.DEFAULT)
+    except (OSError, ValueError):
+        return None
+
+
+# The page's own words (web/i18n/<code>.json). A language without its own file, or a key it doesn't have,
+# falls back along this chain and finally to English (USen), the source.
+I18N_PARENT = {'EUen': 'USen', 'USfr': 'EUfr', 'USes': 'EUes'}
+
+
+def ui_strings(lang):
+    chain = [lang]
+    while chain[-1] != gamelang.DEFAULT:
+        chain.append(I18N_PARENT.get(chain[-1], gamelang.DEFAULT))
+    out = {}
+    for code in reversed(chain):
+        try:
+            d = json.loads((WEB / 'i18n' / f'{code}.json').read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        for k, v in d.items():
+            if isinstance(v, dict):   # nested tables: messages from the server, labels in the map data
+                out[k] = {**out.get(k, {}), **v}
+            elif not k.startswith('_'):
+                out[k] = v
+    if not WINDOWS:
+        out = _platform_strings(out)
+    return {'lang': lang, 'locale': gamelang.LOCALES.get(lang, 'en-US'), 'strings': out}
+
+
+def _platform_strings(strings):
+    """The texts are written for Windows. Elsewhere they name this system's game binary and save path
+    (also in the keys of the `server` table, which are this app's own English messages), and the Windows
+    firewall prompt becomes the firewall hint (`share.firewall.linux`), on its own and inside `lan.note`."""
+    def fix(s):
+        return s.replace('totk.exe', GAME_EXE).replace('profile\\save', os.path.join('profile', 'save'))
+
+    out = {}
+    for k, v in strings.items():
+        if isinstance(v, dict):
+            out[k] = {fix(a): (fix(b) if isinstance(b, str) else b) for a, b in v.items()}
+        else:
+            out[k] = fix(v) if isinstance(v, str) else v
+    prompt, hint = out.get('share.firewall'), out.get('share.firewall.linux')
+    if isinstance(prompt, str) and isinstance(hint, str):
+        if isinstance(out.get('lan.note'), str):
+            out['lan.note'] = out['lan.note'].replace(prompt, hint)
+        out['share.firewall'] = hint
+    return out
 
 
 class Ui:
@@ -257,6 +312,7 @@ class State:
             'game_exe': GAME_EXE, 'platform': 'windows' if WINDOWS else sys.platform,
             'assets': {'map': have_assets(), 'quests': self.quests is not None},
             'job': dict(self.job),
+            'lang': self.lang_info(),
         }
         if with_candidates:
             st['candidates'] = detect_installs()
@@ -278,7 +334,37 @@ class State:
         """True when game files are available but the map or its data is missing or from an older version
         (e.g. after an update). The rebuild skips the map tiles when they're already there."""
         return bool(self.install and self.install.get('game')) and not (
-            have_assets() and built_version() == DATA_VERSION and tiles_current())
+            have_assets() and built_version() == DATA_VERSION and tiles_current() and built_lang() == self.effective_lang())
+
+    # ---- language of the game text (place, item and quest names, quest steps)
+    def effective_lang(self):
+        """The language picked in Settings, or else the one TotK Recomp shows the game in."""
+        chosen = self.cfg.get('lang')
+        if chosen in gamelang.LANGUAGES:
+            return chosen
+        return gamelang.game_language((self.install or {}).get('path'))
+
+    def lang_info(self):
+        return {'setting': self.cfg.get('lang') if self.cfg.get('lang') in gamelang.LANGUAGES else 'auto',
+                'game': gamelang.game_language((self.install or {}).get('path')),
+                'effective': self.effective_lang(), 'built': built_lang(),
+                'options': [[k, v] for k, v in gamelang.LANGUAGES.items()]}
+
+    def set_lang(self, lang):
+        """'auto' (follow TotK Recomp) or a game language code. Rebuilds the map data and quests if needed."""
+        if lang != 'auto' and lang not in gamelang.LANGUAGES:
+            raise ValueError('Unknown language.')
+        if self.job['running']:
+            raise ValueError('The app is busy updating the map. Try again in a moment.')
+        with self.lock:
+            if lang == 'auto':
+                self.cfg.pop('lang', None)
+            else:
+                self.cfg['lang'] = lang
+            save_config(self.cfg)
+        if self.ready() and self.needs_game_build():
+            self.start_upgrade('Switching the language of names and quests…')
+        return self.lang_info()
 
     def build_icons(self, romfs=None):
         """Map icons from the game files (a second or so). The app's own icons are used when this fails."""
@@ -290,7 +376,7 @@ class State:
         except Exception:
             traceback.print_exc()
 
-    UI_PREFS = {'off', 'mode', 'layer', 'tab', 'slot', 'qmode', 'qtargets', 'qstarts', 'qopen'}
+    UI_PREFS = {'off', 'known', 'mode', 'layer', 'tab', 'slot', 'qmode', 'qtargets', 'qstarts', 'qopen'}
 
     def set_prefs(self, values):
         """View settings of the page (legend, filters, layer, tab, ...), kept in config.json so they survive
@@ -317,9 +403,9 @@ class State:
             return True
         return meta.get('version') != build_icons.VERSION
 
-    def start_upgrade(self):
+    def start_upgrade(self, message='Updating the map from your game files…'):
         if self.install and not self.job['running']:
-            self.job = {'running': True, 'progress': 0.0, 'message': 'Updating the map from your game files…',
+            self.job = {'running': True, 'progress': 0.0, 'message': message,
                         'error': None, 'done': False, 'upgrade': True}
             threading.Thread(target=self._setup_job, args=(self.install,), daemon=True).start()
 
@@ -340,25 +426,29 @@ class State:
             import maptiles
             import build_mapdata
             rf = gamefiles.Romfs(romfs)
+            lang = self.effective_lang()
+            if lang not in gamelang.available(rf):
+                lang = gamelang.DEFAULT
             keep_tiles = job.get('upgrade') and tiles_current()
             if not keep_tiles:
                 stage(0, 0.6)(0, 'Drawing the map from your game files…')
                 maptiles.build_tiles(rf, ASSETS / 'tiles', progress=stage(0, 0.6))
             self.build_icons(rf)
             stage(0.6, 0.8)(0, 'Finding shrines, Koroks and everything else in your game files…')
-            build_mapdata.build(romfs, ASSETS / 'map_data.json', log=lambda m: stage(0.6, 0.8)(0.5, m[:80]))
-            (ASSETS / 'source.json').write_text(json.dumps({'map': 'game', 'data_version': DATA_VERSION,
-                                                            'built': time.time()}))
+            build_mapdata.build(romfs, ASSETS / 'map_data.json', lang=lang, log=lambda m: stage(0.6, 0.8)(0.5, m[:80]))
             import shutil
             for old in ('map', 'icons'):  # map images and icons downloaded by versions before 1.2
                 shutil.rmtree(ASSETS / old, ignore_errors=True)
             stage(0.8, 1)(0, 'Reading the quest list from your game files…')
             try:
                 import build_quests
-                build_quests.build(romfs, ASSETS / 'quests.json', log=lambda m: None)
+                build_quests.build(romfs, ASSETS / 'quests.json', lang=lang, log=lambda m: None)
             except Exception as e:  # the map still works without quests
                 traceback.print_exc()
                 job['warning'] = f'Quest list not built: {e}'
+            # written last: a build cut short is redone on the next start
+            (ASSETS / 'source.json').write_text(json.dumps({'map': 'game', 'data_version': DATA_VERSION, 'lang': lang,
+                                                            'built': time.time()}))
             job['progress'], job['message'] = 1.0, 'Done'
             self.reload()
             job['done'] = True
@@ -517,7 +607,10 @@ def make_handler(state, server_ref, remote=False):
                     self.send_json({'error': 'not available on other devices'}, 403)
                 elif remote and p == '/api/setup':   # what a phone needs, without folder paths
                     self.send_json({'version': VERSION, 'ready': state.ready(), 'remote': True,
-                                    'job': {'running': state.job['running']}})
+                                    'job': {'running': state.job['running']},
+                                    'lang': {'effective': state.effective_lang()}})
+                elif p == '/api/i18n':   # the page's own words, in the language of the game text
+                    self.send_json(ui_strings(state.effective_lang()))
                 elif remote and p == '/api/prefs':   # a phone keeps its own view settings
                     self.send_json({})
                 elif p == '/api/ping':
@@ -560,7 +653,7 @@ def make_handler(state, server_ref, remote=False):
         def remote_get_allowed(self, p):
             """Phones and other devices on the network only read: the page, the map data and the progress."""
             if p.startswith('/api/'):
-                return p in ('/api/ping', '/api/setup', '/api/slots', '/api/progress', '/api/prefs')
+                return p in ('/api/ping', '/api/setup', '/api/slots', '/api/progress', '/api/prefs', '/api/i18n')
             return True
 
         def do_POST(self):
@@ -594,6 +687,8 @@ def make_handler(state, server_ref, remote=False):
                     self.send_json({'ok': True, 'ui': state.set_prefs(body)})
                 elif p == '/api/lan':
                     self.send_json(Lan.set_enabled(state, bool(body.get('enabled'))))
+                elif p == '/api/lang':
+                    self.send_json({'ok': True, 'lang': state.set_lang(body.get('lang', 'auto'))})
                 elif p == '/api/focus':
                     Ui.focus()
                     self.send_json({'ok': True, 'mode': Ui.mode})
