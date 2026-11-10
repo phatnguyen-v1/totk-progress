@@ -2,18 +2,23 @@
 
 Where the project stands, what was learned along the way, and what's next. Update it with each stage.
 
-## Status (2026-11-09)
+## Status (2026-11-11)
 
 | | |
 |---|---|
-| Latest release | [v1.5.2](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.5.2): smoother zooming with many markers; v1.5.x: open on your phone, lighter default legend, saved view settings, sky map fix |
-| Release exe | 24.5 MB, SHA-256 `be54f2646c48f8e9d274006366598ba84ffb67e6f761863234019014392aa430` |
-| Release check | downloaded exe, clean data folder: app window, setup 42 s, 147 frogs, 366 places, progress read, marker CSS without transition/filters; Quit exits |
-| Tested on | TotK Recomp v0.3.13 with game 1.2.1, English (USen), saves on `F:`; game 1.4.3 tested by the owner on 2026-11-10 (works) |
+| Latest release | [v1.6.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.6.0): chests, Dragon's Tears, Skyview Towers, Great Fairies, Lynels, found-shrine badge; all 15 game languages (game text and interface); Linux build |
+| Release files | `TotKProgressMap.exe` 24.6 MB, SHA-256 `b756f4ecc87b39df0b6327a59c78952c9b0ddde3d9d1f5d771f1d4174acdddd8`; `TotKProgressMap-linux-x86_64` 42.8 MB, SHA-256 `49ae8112f91a8fd801824db72a07f13ea0e22c8b00f1e1b902ed806eadbdb762` |
+| VirusTotal | [exe](https://www.virustotal.com/gui/file/b756f4ecc87b39df0b6327a59c78952c9b0ddde3d9d1f5d771f1d4174acdddd8): 2 of 71 (Bkav Pro, SecureAge; same as v1.4.0), Microsoft, Kaspersky, ESET, BitDefender, Avast, Symantec, Malwarebytes, McAfee, Sophos clean; Linux binary: [download link](https://www.virustotal.com/gui/url/1ceda57d9d178375c46cae419637519c502f149b32d560b500cbcf545b11418d) 0 of 93 (a URL check; VirusTotal didn't scan the file itself) |
+| Release check | CI: both builds, Linux start-up smoke test. Local Windows build of the same commit: app window, upgrade from 1.5.2 data, new layers checked against a save, German / Japanese / Chinese / Russian text |
+| Tested on | TotK Recomp v0.3.13 with game 1.2.1, English (USen), saves on `F:`; game 1.4.3 (owner 2026-11-10; a Reddit user with Recomp 0.3.7 + 1.4.3). Linux: CI smoke test only |
 
 ### Next up
-1. Posted on r/decomps and the TotK Recomp Show and tell (2026-11-10). Still untested: the Browse… folder picker,
-   a game folder outside `<drive>:\Games\TotK`, another Windows user, non-English game files
+1. Posted on r/decomps and the TotK Recomp Show and tell (2026-11-10); post a v1.6.0 update there.
+2. Still untested: the Linux build on a real desktop / Steam Deck, the Browse… folder picker, a game folder
+   outside `<drive>:\Games\TotK`, another Windows user.
+3. The interface translations are drafts: corrections from native speakers welcome (`web/i18n/<code>.json`).
+4. Later: Hyrule Compendium, armor upgrades; BotW asked for in issue #2 (no plans yet); SignPath code signing
+   once the project is more established.
 
 ## Done
 
@@ -117,6 +122,25 @@ Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (
 `timg/__Combined.bntx` (1,231 textures). Texture name at `BRTI+0x60` (pointer to u16 length + text).
 Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
 plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
+
+## v1.6.0 (released 2026-11-10): chests, more collectibles, all languages, Linux
+
+- New layers from the placement data, each checked against the owner's save: armor chests (85) and all other
+  treasure chests (1,177, off by default) named by `Drop__DropActor` (PouchContent names), opened = chest GUID
+  in the save's GUID list; Dragon's Tears (12, `Complete_DragonTearsNN`, at the `FldObj_DragonTears_01` actor);
+  Skyview Towers (15, `IsOpenCannon.TowerNN`); Great Fairies (4, `IsAppear_DressFairy_NN`); Lynels (34,
+  locations only: their per-actor flags are Bool64bitKey with a Blood Moon reset type, 88 vs 80 for chests).
+  Flag names found in the game's event flows (`DragonMemoryCommonFlow`, `LaunchPlayer`, `Npc_DressFairy_*`).
+- Shrines at `DungeonState` `Open` / `Enter` (enum names are in GameDataList `RawValues`) get a "found, not
+  completed" badge. Locations 366 -> 354 (the Dragon's Tears geoglyphs moved to their own layer).
+- Layers added after a legend was saved start with their defaults (`known` pref), so nobody suddenly gets
+  1,200 chest markers. `DATA_VERSION` 5, icon set 3 (game icons for all new layers).
+- Languages: `gamelang.py` maps TotK Recomp's `totk.ini` `[language] lang` (or the Windows locale) to the
+  game's 15 `Mals/<code>` languages; ⚙ can override it. Map data and quests are built in that language
+  (`source.json` records it; a change rebuilds names and quests in about 10 s). The interface is translated
+  to match (`web/i18n/<code>.json` merged over `USen.json`; regional variants inherit, e.g. `USfr` over `EUfr`).
+- Linux build (`build_linux.sh`, single binary, map in the browser), built and smoke-tested in CI on
+  ubuntu-22.04 (glibc 2.35+).
 
 ## v1.5.2 (released 2026-11-09): smoother zooming
 
@@ -235,6 +259,6 @@ plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
 
 ## Ideas for later
 - "What changed since last save" feed, You-are-here (`PlayerStatus.SavePos`), nearest missing items.
-- Treasure chests with contents (chest `Drop__DropActor` + opened flags), Hyrule Compendium, armor upgrades.
+- Hyrule Compendium, armor upgrades (treasure chests with contents: done in v1.6.0).
 - Emulator support: detect Ryujinx / yuzu-fork save folders, read quests from a dumped RomFS.
 - Phone as second screen (`--host 0.0.0.0`).
