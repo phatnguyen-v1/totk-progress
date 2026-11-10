@@ -1,4 +1,4 @@
-name: Build exe
+name: Build release
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,4 +28,31 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/TotKProgressMap.exe
+          generate_release_notes: true
+
+  linux:
+    # The oldest runner image: the binary needs this system's glibc (2.35) or newer.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build TotKProgressMap-linux-x86_64
+        run: sh build_linux.sh
+      - name: Smoke test
+        run: |
+          ./dist/TotKProgressMap-linux-x86_64 --no-browser --port 8799 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8799/api/ping && break; sleep 1; done
+          curl -sf http://127.0.0.1:8799/api/ping | grep -q totk-progress-map
+          curl -sf http://127.0.0.1:8799/ | grep -q 'TotK Progress Map'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TotKProgressMap-linux-x86_64
+          path: dist/TotKProgressMap-linux-x86_64
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/TotKProgressMap-linux-x86_64
           generate_release_notes: true

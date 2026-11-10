@@ -1,6 +1,7 @@
 """TotK Progress Map: a local web app showing your Tears of the Kingdom progress from your saves.
 
-    TotKProgressMap.exe            (or: python server.py [--save-dir DIR] [--port 8787] [--no-browser])
+    TotKProgressMap.exe (Windows) or ./TotKProgressMap-linux-x86_64 (Linux)
+    (or: python server.py [--save-dir DIR] [--port 8787] [--no-browser])
 
 On first start the page shows a setup screen: pick the TotK Recomp install folder (found automatically
 when possible), then it downloads the map data and builds the quest list from your game files.
@@ -9,8 +10,10 @@ import argparse
 import json
 import mimetypes
 import os
+import shutil
 import string
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -22,7 +25,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import savefile
-from paths import APP_NAME, ASSETS, CONFIG, DATA, FROZEN, LOG, VERSION, WEB
+from paths import APP_NAME, ASSETS, CONFIG, DATA, FROZEN, GAME_EXE, LOG, VERSION, WEB, WINDOWS
 
 APP_ID = 'totk-progress-map'
 # Bump when build_mapdata's output changes: existing installs then rebuild the map data (not the tiles).
@@ -51,7 +54,8 @@ def built_version():
 
 
 class Ui:
-    """How the page is shown: in the app's own window (pywebview, Edge WebView2) or in the browser."""
+    """How the page is shown: in the app's own window (pywebview: Edge WebView2 on Windows, GTK or Qt on
+    Linux when running from source) or in the browser (always, in the packaged Linux build)."""
     mode = 'browser'
     window = None
     url = None
@@ -83,6 +87,15 @@ CSRF_HEADER = 'X-TotK-Progress'   # POSTs must carry it, so other websites can't
 
 # ---------------------------------------------------------------- install folders
 
+# TotK Recomp's game binary: totk.exe on Windows, totk on Linux. Both count on either system (a Windows
+# install on a mounted drive is as good a source of game files and saves as a native one).
+GAME_EXES = ('totk.exe', 'totk')
+
+
+def _has_game_exe(folder):
+    return any((folder / name).is_file() for name in GAME_EXES)
+
+
 def _saves_under(folder):
     """The most recently used <user> folder with slot_0X/progress.sav under `folder` (or folder itself)."""
     folder = Path(folder)
@@ -104,7 +117,7 @@ def inspect(path):
         return info
     root = None
     for cand in [p, *list(p.parents)[:4]]:
-        if (cand / 'romfs' / 'index.json').is_file() or (cand / 'profile' / 'save').is_dir() or (cand / 'totk.exe').is_file():
+        if (cand / 'romfs' / 'index.json').is_file() or (cand / 'profile' / 'save').is_dir() or _has_game_exe(cand):
             root = cand
             break
     if root:
@@ -117,15 +130,48 @@ def inspect(path):
         info['save_dir'] = str(save_dir)
         info['slots'] = sum(1 for _ in save_dir.glob('slot_0*/progress.sav'))
     if not root and not save_dir:
-        info['notes'].append("This doesn't look like a TotK Recomp folder: no totk.exe, romfs or profile\\save inside.")
+        info['notes'].append(f"This doesn't look like a TotK Recomp folder: no {GAME_EXE}, romfs or "
+                             f"{os.path.join('profile', 'save')} inside.")
     elif not info['game']:
         info['notes'].append("No game files (romfs) here. The map, the collectibles and the quests are built from "
-                             "TotK Recomp's game files, so pick the TotK Recomp folder (the one with totk.exe).")
+                             f"TotK Recomp's game files, so pick the TotK Recomp folder (the one with {GAME_EXE}).")
     elif not save_dir:
         info['notes'].append("No saves yet. Play until the game saves once, and the map will pick it up.")
     info['ok'] = bool(info['game'])
-    info['exe'] = bool(root and (root / 'totk.exe').is_file())
+    info['exe'] = bool(root and _has_game_exe(root))
     return info
+
+
+def recomp_last_install():
+    """The folder TotK Recomp's setup installed to last, from the setup's own per-user file, or None."""
+    if WINDOWS:
+        base = Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData' / 'Local') / 'TotK Recomp'
+    else:
+        base = Path(os.environ.get('XDG_STATE_HOME') or Path.home() / '.local' / 'state') / 'totk-recomp'
+    try:
+        dest = json.loads((base / 'setup.json').read_text(encoding='utf-8')).get('dest')
+    except (OSError, ValueError, AttributeError):
+        return None
+    return Path(dest) if isinstance(dest, str) and os.path.isabs(dest) else None
+
+
+def _subfolders(folder):
+    try:
+        return [d for d in folder.iterdir() if d.is_dir()]
+    except OSError:
+        return []
+
+
+def _drives():
+    """Where games get installed besides the home folder: the drive roots on Windows; on Linux /opt and the
+    mounted drives (a Steam Deck's SD card is under /run/media)."""
+    if WINDOWS:
+        return [Path(f'{d}:/') for d in string.ascii_uppercase if os.path.exists(f'{d}:/')]
+    mounts = _subfolders(Path('/mnt'))
+    for parent in (Path('/media'), Path('/run/media')):   # <drive> or <user>/<drive>
+        for d in _subfolders(parent):
+            mounts += [d, *_subfolders(d)]
+    return [Path('/opt'), *mounts]
 
 
 def detect_installs():
@@ -133,19 +179,25 @@ def detect_installs():
     roots = []
     if os.environ.get('TOTK_DIR'):
         roots.append(Path(os.environ['TOTK_DIR']))
-    drives = [Path(f'{d}:/') for d in string.ascii_uppercase if os.path.exists(f'{d}:/')] if os.name == 'nt' else [Path('/')]
+    last = recomp_last_install()
+    if last:
+        roots.append(last)
+    drives = _drives()
     home = Path.home()
     bases = [*drives, *[d / 'Games' for d in drives], home, home / 'Games', home / 'Desktop', home / 'Downloads']
+    if not WINDOWS:
+        bases.append(Path(os.environ.get('XDG_DATA_HOME') or home / '.local' / 'share'))
     for base in bases:
         try:
             for d in base.iterdir():
-                if d.is_dir() and ((d / 'totk.exe').is_file() or (d / 'romfs' / 'index.json').is_file()):
+                if d.is_dir() and (_has_game_exe(d) or (d / 'romfs' / 'index.json').is_file()):
                     roots.append(d)
         except OSError:
             continue
     seen, out = set(), []
     for r in roots:
-        key = str(r.resolve()).lower()
+        key = str(r.resolve())
+        key = key.lower() if WINDOWS else key
         if key in seen:
             continue
         seen.add(key)
@@ -202,6 +254,7 @@ class State:
         st = {
             'version': VERSION, 'ready': self.ready(), 'install': self.install,
             'save_override': self.save_override, 'data_dir': str(DATA),
+            'game_exe': GAME_EXE, 'platform': 'windows' if WINDOWS else sys.platform,
             'assets': {'map': have_assets(), 'quests': self.quests is not None},
             'job': dict(self.job),
         }
@@ -368,17 +421,51 @@ class State:
 _dialog_lock = threading.Lock()
 
 
+def _desktop_folder_dialog(start, title):
+    """Linux: the desktop's own folder picker through zenity (GNOME and most others) or kdialog (KDE, Steam
+    Deck). Returns (shown, path): shown is False when neither could open a window."""
+    tools = [['zenity', '--file-selection', '--directory', f'--title={title}', f'--filename={start.rstrip("/")}/'],
+             ['kdialog', '--title', title, '--getexistingdirectory', start]]
+    if 'KDE' in os.environ.get('XDG_CURRENT_DESKTOP', '').upper():
+        tools.reverse()
+    for cmd in tools:
+        if not shutil.which(cmd[0]):
+            continue
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if r.returncode == 0:
+            return True, r.stdout.strip() or None
+        if r.returncode == 1 and not r.stderr.strip():   # cancelled
+            return True, None
+        print(f'{cmd[0]} failed ({r.returncode}): {r.stderr.strip()[:200]}')
+    return False, None
+
+
 def pick_folder(initial=None):
-    """Open the normal Windows folder picker on top of everything. Returns a path or None."""
+    """Open the system's folder picker (on Windows on top of everything). Returns a path or None."""
+    start = initial or str(Path.home())
+    title = f'Select your TotK Recomp folder (the one with {GAME_EXE})'
     with _dialog_lock:
-        import tkinter
-        from tkinter import filedialog
-        root = tkinter.Tk()
+        if not WINDOWS:
+            shown, chosen = _desktop_folder_dialog(start, title)
+            if shown:
+                return chosen
+        try:
+            import tkinter
+            from tkinter import filedialog
+            root = tkinter.Tk()
+        except Exception as e:   # no Tk in this Python, or no display
+            if WINDOWS:
+                raise
+            print(f'No folder window: {e}')
+            raise ValueError('Could not open a folder window here. Install zenity or kdialog, or start the app '
+                             'with TOTK_DIR=/path/to/your/TotK-Recomp-folder.')
         root.withdraw()
         root.attributes('-topmost', True)
         try:
-            chosen = filedialog.askdirectory(parent=root, mustexist=True, initialdir=initial or str(Path.home()),
-                                             title='Select your TotK Recomp folder (the one with totk.exe)')
+            chosen = filedialog.askdirectory(parent=root, mustexist=True, initialdir=start, title=title)
         finally:
             root.destroy()
         return chosen or None
@@ -522,7 +609,9 @@ def make_handler(state, server_ref, remote=False):
 
 
 class Server(ThreadingHTTPServer):
-    allow_reuse_address = False   # on Windows SO_REUSEADDR would let a second copy share the port
+    # On Windows SO_REUSEADDR would let a second copy share the port. On Linux it doesn't, and without it a
+    # restart right after quitting can find the port still held by closed connections.
+    allow_reuse_address = not WINDOWS
     daemon_threads = True
 
 
@@ -609,7 +698,16 @@ def main():
     ap.add_argument('--no-browser', action='store_true', help="don't open a window or browser (server only)")
     args = ap.parse_args()
 
-    if FROZEN:  # no console window: keep a log next to the data
+    if FROZEN and not WINDOWS:
+        # PyInstaller points LD_LIBRARY_PATH at its bundle; the programs this app starts (the browser, the
+        # folder picker) need the system's own libraries back.
+        orig = os.environ.pop('LD_LIBRARY_PATH_ORIG', None)
+        if orig is None:
+            os.environ.pop('LD_LIBRARY_PATH', None)
+        else:
+            os.environ['LD_LIBRARY_PATH'] = orig
+    # No console window (Windows exe, Linux binary started from the desktop): keep a log next to the data.
+    if FROZEN and not (sys.stdout and sys.stdout.isatty()):
         DATA.mkdir(parents=True, exist_ok=True)
         sys.stdout = sys.stderr = open(LOG, 'a', encoding='utf-8', buffering=1)
     print(f'--- {APP_NAME} {VERSION} starting {time.ctime()}')
@@ -664,9 +762,15 @@ def serve(srv):
 def run_window(srv, url):
     """Show the page in the app's own window; closing it stops the app. Returns False, before serving
     anything, when pywebview isn't available; the caller then uses the browser. If the window can't open
-    (no WebView2 runtime, e.g. an old or stripped-down Windows), it falls back to the browser itself."""
+    (no WebView2 runtime, e.g. an old or stripped-down Windows; no GTK or Qt web view on Linux), it falls
+    back to the browser itself. The packaged Linux build has no pywebview and always uses the browser."""
+    if FROZEN and not WINDOWS:
+        return False
     try:
         import webview
+    except ImportError as e:
+        print(f'No pywebview ({e}): using the browser')
+        return False
     except Exception:
         traceback.print_exc()
         return False
@@ -677,7 +781,7 @@ def run_window(srv, url):
         Ui.window = webview.create_window('TotK Progress Map', url + '?app=1', width=1400, height=900,
                                           min_size=(760, 520), background_color='#14181d', text_select=True)
         Ui.mode = 'window'
-        webview.start(gui='edgechromium', private_mode=False, storage_path=str(DATA / 'webview'))
+        webview.start(gui='edgechromium' if WINDOWS else None, private_mode=False, storage_path=str(DATA / 'webview'))
     except Exception:
         traceback.print_exc()
         print('No app window: using the browser')

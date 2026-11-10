@@ -71,7 +71,7 @@
       <div id="share-qr" class="lan-qr"></div>
       <div class="muted small">Scan with the phone's camera, or open:</div>
       <code id="share-url"></code>
-      <div class="share-foot"><span class="muted small">Windows may ask once to allow the app on private networks.</span>
+      <div class="share-foot"><span class="muted small fw-note">Windows may ask once to allow the app on private networks.</span>
         <button id="share-stop" class="btn quiet">Turn off</button></div>
     </div>
     <div id="share-msg" class="err" hidden></div>
@@ -90,7 +90,7 @@
 <div id="setup" class="setup" hidden>
   <div class="setup-card" role="dialog" aria-labelledby="setup-title">
     <h2 id="setup-title">Set up TotK Progress Map</h2>
-    <p class="lead">Point the app at your <a href="https://github.com/valentderah/totk-pc-recomp" target="_blank" rel="noopener">TotK Recomp</a> folder: the one with <code>totk.exe</code>. It reads your saves from
+    <p class="lead">Point the app at your <a href="https://github.com/valentderah/totk-pc-recomp" target="_blank" rel="noopener">TotK Recomp</a> folder: the one with <code class="game-exe">totk.exe</code>. It reads your saves from
       there and updates the map whenever the game saves. Nothing is ever written to your game or saves.</p>
 
     <div class="setup-step">
@@ -120,7 +120,7 @@
       <label class="switch"><input type="checkbox" id="lan-on"> Show the map on phones and tablets</label>
       <p class="muted small">Only devices on the <b>same Wi-Fi or network</b> as this PC can open it (not over mobile
         data). Read-only: they see your map, quests and progress, but can't change settings or anything on this
-        PC. Windows may ask once to allow the app on private networks. Also in the phone button at the bottom
+        PC. <span class="fw-note">Windows may ask once to allow the app on private networks.</span> Also in the phone button at the bottom
         right of the map.</p>
       <div id="lan-box" class="lan-box" hidden>
         <div id="lan-qr" class="lan-qr"></div>

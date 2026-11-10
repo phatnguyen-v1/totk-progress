@@ -542,7 +542,20 @@ async function post(url, body) {
   return j;
 }
 
-const setup = { selected: null, candidates: [], firstRun: false, polling: null };
+const setup = { selected: null, candidates: [], firstRun: false, polling: null, gameExe: 'totk.exe' };
+
+// The page's texts name Windows things (totk.exe, the Windows firewall prompt); on Linux the app says
+// which game binary and firewall hint apply (/api/setup: game_exe, platform).
+function applyPlatform(st) {
+  if (!st.platform) return;
+  setup.gameExe = st.game_exe || setup.gameExe;
+  document.querySelectorAll('.game-exe').forEach(el => { el.textContent = setup.gameExe; });
+  if (st.platform !== 'windows') {
+    document.querySelectorAll('.fw-note').forEach(el => {
+      el.textContent = `If it doesn't open, allow port ${location.port || 80} in this PC's firewall.`;
+    });
+  }
+}
 
 function badgeHtml(info) {
   const b = [];
@@ -557,7 +570,7 @@ function renderCandidates() {
   const list = [...setup.candidates];
   if (setup.selected && !list.some(c => c.path.toLowerCase() === setup.selected.path.toLowerCase())) list.unshift(setup.selected);
   if (!list.length) {
-    el.innerHTML = '<div class="muted">No TotK Recomp folder found automatically. Click <b>Browse…</b> and pick the folder that has <code>totk.exe</code>.</div>';
+    el.innerHTML = '<div class="muted">No TotK Recomp folder found automatically. Click <b>Browse…</b> and pick the folder that has <code>' + setup.gameExe + '</code>.</div>';
   } else {
     el.innerHTML = list.map((c, i) => `<button class="cand ${setup.selected && setup.selected.path === c.path ? 'sel' : ''}" data-i="${i}">
       <span class="radio"></span><span><div class="p">${esc(c.path)}</div>${badgeHtml(c)}</span></button>`).join('');
@@ -624,6 +637,7 @@ async function openSetup(firstRun) {
   $('#cands').innerHTML = '<div class="muted">Looking for your game…</div>';
   try {
     const st = await getJSON('/api/setup?scan=1');
+    applyPlatform(st);
     $('#data-dir').textContent = st.data_dir;
     $('#setup-foot').textContent = `Version ${st.version}` + (st.install ? ` · current folder: ${st.install.path}` : '');
     setup.candidates = st.candidates || [];
@@ -703,6 +717,7 @@ $('#quit').onclick = async () => {
 (async function init() {
   try {
     const st = await getJSON('/api/setup');
+    applyPlatform(st);
     if (!st.ready && REMOTE) { setStatus("The app on your PC is not set up yet. Finish the setup there first.", 'err'); return; }
     if (!st.ready) { setStatus('Setup needed'); await openSetup(true); return; }
     await setupBaseMaps();

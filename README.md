@@ -51,6 +51,23 @@ Close the window to stop the app; opening the exe again while it runs brings the
 **⚙** at the top of the panel changes the game folder and has *Open in browser*, to show the same map
 in your web browser too.
 
+### Linux
+
+For TotK Recomp's Linux build (also on a Steam Deck, in Desktop Mode). Needs glibc 2.35 or later
+(Ubuntu 22.04, Debian 12, Fedora 36, SteamOS 3).
+
+1. Download `TotKProgressMap-linux-x86_64` from [Releases](../../releases/latest) and put it anywhere.
+2. Make it executable and start it: `chmod +x TotKProgressMap-linux-x86_64`, then
+   `./TotKProgressMap-linux-x86_64` (or double-click it in your file manager).
+3. The setup page opens in your web browser. Pick your TotK Recomp folder (the one with `totk`) and click
+   **Set up**, as on Windows. The app finds the folder TotK Recomp's setup installed to; **Browse…** uses
+   your desktop's folder window (`zenity` or `kdialog`).
+
+On Linux the map is a tab in your browser instead of an app window: stop the app with **⚙** → *Quit app*;
+starting it again while it runs opens the tab again. Settings and data are kept in
+`~/.local/share/TotKProgressMap` (`$XDG_DATA_HOME`), with `app.log` when it wasn't started from a terminal.
+For phones, allow the app's port (8787) in your firewall if you use one.
+
 **On your phone:** click the phone button at the bottom right of the map, *Turn on*, and scan the QR
 code (also in ⚙). Only phones and tablets on the **same Wi-Fi or network** as your PC can open it (not
 over mobile data). They get the same map, read-only: they can't change settings or anything on your PC (Windows
@@ -64,7 +81,8 @@ Settings and downloaded data are kept in `%LOCALAPPDATA%\TotKProgressMap`; delet
 
 ## Run from source
 
-Needs Python 3.10+. Double-click `start.bat`, or:
+Needs Python 3.10+. Double-click `start.bat` (Linux: `sh start.sh`, which makes a `.venv` when the
+system Python lacks the packages), or:
 
 ```
 pip install -r requirements.txt   # zstandard, to read the game's compressed files
@@ -72,8 +90,10 @@ python server.py                  # opens http://localhost:8787/ and walks you t
 ```
 
 Running from source keeps data next to the code (`assets/`, `config.json`). `build_exe.bat` builds
-`dist\TotKProgressMap.exe` with PyInstaller; pushing a `v*` tag builds it on GitHub Actions and
-attaches it to a release.
+`dist\TotKProgressMap.exe` with PyInstaller and `sh build_linux.sh` builds
+`dist/TotKProgressMap-linux-x86_64`; pushing a `v*` tag builds both on GitHub Actions and
+attaches them to a release. On Linux, running from source shows the app's own window when your Python
+has pywebview with GTK or Qt (e.g. `python3-webview` on Debian and Ubuntu); otherwise it uses the browser.
 
 Command-line tools: `python build_mapdata.py --romfs <install>\romfs` extracts the map data,
 `python -c "import gamefiles, maptiles; maptiles.build_tiles(gamefiles.Romfs(r'<install>\romfs'), 'assets/tiles')"`
