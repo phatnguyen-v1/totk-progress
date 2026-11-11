@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = 'TotKProgressMap'
-VERSION = '1.6.0'
+VERSION = '1.7.0'
 FROZEN = getattr(sys, 'frozen', False)
 HERE = Path(__file__).resolve().parent
 BUNDLE = Path(getattr(sys, '_MEIPASS', HERE))

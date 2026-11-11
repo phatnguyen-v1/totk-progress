@@ -123,6 +123,20 @@ Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (
 Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
 plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
 
+## v1.7.0 (released 2026-11-11): spoiler-free mode, update notice
+
+- Spoiler-free mode (`mystery` pref, legend checkbox): everything not done and not found is a "?" with no
+  name, contents or route; one filter for all of them (`undiscovered` in the `off` list), the category
+  filters only apply to found things, and a ? never matches the map search. The ? markers are canvas
+  circles (`UnkMarker`): HTML markers for ~2,650 surface items cost ~28 ms per zoom step, canvas ~9 ms
+  (default view ~6 ms).
+- Update check (`server.Updates`): GitHub `releases/latest` at start and every 12 h, compared by version
+  number; a notice with the release link, hidden per version (`updateSkip` pref); off with `update_check`
+  in config.json (Settings -> Updates). Uses certifi: Python 3.12's view of the Windows certificate
+  store failed on api.github.com ("unable to get issuer certificate") on the owner's PC.
+- Local builds now run on Python 3.12 (same as CI); the exe is ~23.6 MB because numpy isn't installed
+  there (never used; PyInstaller picked it up via Pillow on 3.13).
+
 ## v1.6.0 (released 2026-11-10): chests, more collectibles, all languages, Linux
 
 - New layers from the placement data, each checked against the owner's save: armor chests (85) and all other

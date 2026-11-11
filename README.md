@@ -32,6 +32,10 @@ in the adventure log (36 quests). Letters, statues and the Mysterious Voice aren
 |---|---|
 | ![Quests tab with the current step of a quest](docs/screenshots/quests.webp) | ![Zoomed out: everything still missing on the surface](docs/screenshots/overview.webp) |
 
+**Spoiler-free mode** (the checkbox at the top of the map legend) shows everything you haven't found
+yet as a plain **?**: no name, no chest contents, no Korok puzzle. Things you've found keep their
+icons. All the **?** markers share one *Undiscovered* filter, so the filters can't give away what each one is.
+
 It re-reads the save every few seconds, so the map updates on its own whenever the game saves.
 It only ever reads your game and save files; it never writes to them.
 
@@ -112,7 +116,9 @@ languages: `EUen`, `EUfr`, `EUde`, `JPja`, ...). `server.py` options: `--save-di
 saves from there instead of the configured install), `--port 8787`, `--host 127.0.0.1`, `--browser` (use the browser instead of the app window),
 `--no-browser` (no window or browser, just the local server).
 
-The map page loads Leaflet from cdnjs, so the browser needs internet.
+The map page loads Leaflet from cdnjs, so the browser needs internet. The app also asks GitHub for its
+latest release when it starts and every 12 hours, and shows a notice when there's a newer version;
+nothing is downloaded or sent about you or your game. Turn it off in **⚙** → *Updates*.
 
 ## How it works
 
