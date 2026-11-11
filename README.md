@@ -39,6 +39,9 @@ icons. All the **?** markers share one *Undiscovered* filter, so the filters can
 It re-reads the save every few seconds, so the map updates on its own whenever the game saves.
 It only ever reads your game and save files; it never writes to them.
 
+Playing *Breath of the Wild* too? Its sister app, [BotW Progress Map](https://github.com/phatnguyen-v1/botw-progress),
+does the same for [Savage Wind Recomp](https://github.com/Revivedx/SavageWindRecomp), the native PC port of BotW.
+
 ## Get started
 
 You need [TotK Recomp](https://github.com/valentderah/totk-pc-recomp) installed with your game files (tested with game

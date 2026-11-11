@@ -17,7 +17,7 @@ Where the project stands, what was learned along the way, and what's next. Updat
 2. Still untested: the Linux build on a real desktop / Steam Deck, the Browse… folder picker, a game folder
    outside `<drive>:\Games\TotK`, another Windows user.
 3. The interface translations are drafts: corrections from native speakers welcome (`web/i18n/<code>.json`).
-4. Later: Hyrule Compendium, armor upgrades; BotW asked for in issue #2 (no plans yet); SignPath code signing
+4. Later: Hyrule Compendium, armor upgrades; BotW (issue #2) is now its own app, [botw-progress](https://github.com/phatnguyen-v1/botw-progress) (v0.1.0, 2026-11-11); SignPath code signing
    once the project is more established.
 
 ## Done
