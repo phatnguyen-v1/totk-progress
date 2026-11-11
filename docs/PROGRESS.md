@@ -6,10 +6,10 @@ Where the project stands, what was learned along the way, and what's next. Updat
 
 | | |
 |---|---|
-| Latest release | [v1.6.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.6.0): chests, Dragon's Tears, Skyview Towers, Great Fairies, Lynels, found-shrine badge; all 15 game languages (game text and interface); Linux build |
-| Release files | `TotKProgressMap.exe` 24.6 MB, SHA-256 `b756f4ecc87b39df0b6327a59c78952c9b0ddde3d9d1f5d771f1d4174acdddd8`; `TotKProgressMap-linux-x86_64` 42.8 MB, SHA-256 `49ae8112f91a8fd801824db72a07f13ea0e22c8b00f1e1b902ed806eadbdb762` |
-| VirusTotal | [exe](https://www.virustotal.com/gui/file/b756f4ecc87b39df0b6327a59c78952c9b0ddde3d9d1f5d771f1d4174acdddd8): 2 of 71 (Bkav Pro, SecureAge; same as v1.4.0), Microsoft, Kaspersky, ESET, BitDefender, Avast, Symantec, Malwarebytes, McAfee, Sophos clean; Linux binary: [download link](https://www.virustotal.com/gui/url/1ceda57d9d178375c46cae419637519c502f149b32d560b500cbcf545b11418d) 0 of 93 (a URL check; VirusTotal didn't scan the file itself) |
-| Release check | CI: both builds, Linux start-up smoke test. Local Windows build of the same commit: app window, upgrade from 1.5.2 data, new layers checked against a save, German / Japanese / Chinese / Russian text |
+| Latest release | [v1.7.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.7.0): spoiler-free mode (? markers), new-version notice (GitHub releases, off in Settings) |
+| Release files | `TotKProgressMap.exe` 24.8 MB, SHA-256 `b4c623f3ee2e63586b6d2bc28c2e5b78a2d40d80445aa84ae18fd7350d99ab99`; `TotKProgressMap-linux-x86_64` 43.0 MB, SHA-256 `bd4b2bdf4088a70508fc68e0f47daa25a25047d560e44dd3295ec2c5b35d795e` |
+| VirusTotal | v1.7.0 not scanned yet. v1.6.0 exe: 2 of 71 (Bkav Pro, SecureAge), every major engine clean |
+| Release check | CI: both builds, Linux start-up smoke test. The CI exe started on the owner's PC: update check reached GitHub (1.7.0 = latest, no notice). Spoiler-free mode and the notice checked in the browser |
 | Tested on | TotK Recomp v0.3.13 with game 1.2.1, English (USen), saves on `F:`; game 1.4.3 (owner 2026-11-10; a Reddit user with Recomp 0.3.7 + 1.4.3). Linux: CI smoke test only |
 
 ### Next up
