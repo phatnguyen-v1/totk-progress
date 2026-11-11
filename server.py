@@ -376,7 +376,7 @@ class State:
         except Exception:
             traceback.print_exc()
 
-    UI_PREFS = {'off', 'known', 'mode', 'layer', 'tab', 'slot', 'qmode', 'qtargets', 'qstarts', 'qopen'}
+    UI_PREFS = {'off', 'known', 'mode', 'layer', 'tab', 'slot', 'qmode', 'qtargets', 'qstarts', 'qopen', 'mystery', 'updateSkip'}
 
     def set_prefs(self, values):
         """View settings of the page (legend, filters, layer, tab, ...), kept in config.json so they survive
@@ -563,6 +563,94 @@ def pick_folder(initial=None):
 
 # ---------------------------------------------------------------- HTTP
 
+# ---------------------------------------------------------------- new versions
+
+class Updates:
+    """Is a newer release out? Asks GitHub for the latest release of this app when it starts and then every
+    12 hours (Settings -> Updates turns it off). Only compares version numbers: nothing is downloaded or
+    installed, and nothing about the player is sent; the page shows a notice with a link to the release."""
+    REPO = 'phatnguyen-v1/totk-progress'
+    EVERY = 12 * 3600
+    lock = threading.Lock()
+    latest = None   # {'version', 'url', 'name'} of the latest release, once known
+    error = None
+    checked = 0.0
+    timer = None
+
+    @staticmethod
+    def parse(v):
+        try:
+            return tuple(int(x) for x in str(v).strip().lstrip('vV').split('-')[0].split('.'))
+        except ValueError:
+            return None
+
+    @classmethod
+    def enabled(cls, state):
+        return state.cfg.get('update_check', True)
+
+    @staticmethod
+    def tls():
+        """Certificates from certifi (bundled with the app): Windows only adds a missing root certificate to its
+        store when Windows itself checks a site, so Python's own check of api.github.com can fail on a PC
+        where that root was never needed before ('unable to get issuer certificate')."""
+        import ssl
+        try:
+            import certifi
+            return ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            return ssl.create_default_context()
+
+    @classmethod
+    def check(cls):
+        req = urllib.request.Request(f'https://api.github.com/repos/{cls.REPO}/releases/latest', headers={
+            'Accept': 'application/vnd.github+json', 'User-Agent': f'{APP_ID}/{VERSION}'})
+        try:
+            with urllib.request.urlopen(req, timeout=10, context=cls.tls()) as r:
+                rel = json.loads(r.read().decode('utf-8'))
+            tag = rel.get('tag_name') or ''
+            with cls.lock:
+                cls.latest = {'version': tag.lstrip('vV'), 'url': rel.get('html_url') or
+                              f'https://github.com/{cls.REPO}/releases/latest', 'name': rel.get('name') or tag}
+                cls.error = None
+        except Exception as e:   # offline, rate limited, GitHub down: try again next time
+            with cls.lock:
+                cls.error = str(e)
+        cls.checked = time.time()
+
+    @classmethod
+    def start(cls, state):
+        """Check now (in the background) and then every 12 hours, while checking is on."""
+        if cls.timer:
+            cls.timer.cancel()
+            cls.timer = None
+        if not cls.enabled(state):
+            return
+
+        def run():
+            cls.check()
+            if cls.enabled(state):
+                cls.timer = threading.Timer(cls.EVERY, run)
+                cls.timer.daemon = True
+                cls.timer.start()
+        threading.Thread(target=run, daemon=True).start()
+
+    @classmethod
+    def status(cls, state):
+        with cls.lock:
+            latest, error = cls.latest, cls.error
+        cur, new = cls.parse(VERSION), latest and cls.parse(latest['version'])
+        return {'enabled': cls.enabled(state), 'current': VERSION, 'latest': latest, 'error': error,
+                'newer': bool(cls.enabled(state) and cur and new and new > cur)}
+
+    @classmethod
+    def set_enabled(cls, state, on):
+        with state.lock:
+            state.cfg['update_check'] = bool(on)
+            save_config(state.cfg)
+        cls.start(state)
+        return cls.status(state)
+
+
 def make_handler(state, server_ref, remote=False):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -617,6 +705,8 @@ def make_handler(state, server_ref, remote=False):
                     self.send_json({'app': APP_ID, 'version': VERSION, 'mode': Ui.mode, 'remote': remote})
                 elif p == '/api/lan':
                     self.send_json(Lan.status())
+                elif p == '/api/update':
+                    self.send_json(Updates.status(state))
                 elif p == '/api/prefs':
                     self.send_json(state.cfg.get('ui') or {})
                 elif p == '/api/setup':
@@ -687,6 +777,8 @@ def make_handler(state, server_ref, remote=False):
                     self.send_json({'ok': True, 'ui': state.set_prefs(body)})
                 elif p == '/api/lan':
                     self.send_json(Lan.set_enabled(state, bool(body.get('enabled'))))
+                elif p == '/api/update':
+                    self.send_json(Updates.set_enabled(state, bool(body.get('enabled'))))
                 elif p == '/api/lang':
                     self.send_json({'ok': True, 'lang': state.set_lang(body.get('lang', 'auto'))})
                 elif p == '/api/focus':
@@ -838,6 +930,7 @@ def main():
     Lan.port = port
     if state.cfg.get('lan') and args.host == '127.0.0.1':
         Lan.start(state)
+    Updates.start(state)
     print(f'Serving {url}', flush=True)
     if args.no_browser:
         serve(srv)

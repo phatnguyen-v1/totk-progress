@@ -13,6 +13,9 @@
   <header class="panel-head">
     <div class="title-row"><h1>TotK Progress</h1><button id="open-settings" class="icon-btn" title="Settings" aria-label="Settings" data-i18n-title="settings" data-i18n-aria-label="settings">⚙</button><button id="panel-close" class="icon-btn panel-close" title="Close" aria-label="Close panel" data-i18n-title="close" data-i18n-aria-label="panel.close">×</button></div>
     <div id="status" class="status" data-i18n="loading">Loading…</div>
+    <div id="update" class="update" hidden><span id="update-text"></span>
+      <a id="update-link" target="_blank" rel="noopener" data-i18n="update.get">Download</a>
+      <button id="update-skip" class="icon-btn" title="Hide until the next version" aria-label="Hide until the next version" data-i18n-title="update.skip" data-i18n-aria-label="update.skip">×</button></div>
     <div class="tabs" id="tabs" role="tablist">
       <button data-tab="map" class="on" role="tab" data-i18n="tab.map">Map</button>
       <button data-tab="quests" role="tab" data-i18n="tab.quests">Quests</button>
@@ -123,6 +126,13 @@
         TotK Recomp's language setting. The app's own translations are drafts: corrections are welcome on
         <a href="https://github.com/phatnguyen-v1/totk-progress" target="_blank" rel="noopener">GitHub</a>.</p>
       <div id="lang-msg" class="err" hidden></div>
+    </div>
+
+    <div class="setup-step" id="update-step">
+      <h3 data-i18n="update.title">Updates</h3>
+      <label class="switch"><input type="checkbox" id="update-on"> <span data-i18n="update.switch">Tell me when a new version is out</span></label>
+      <p class="muted small" data-i18n="update.hint">Asks GitHub for the latest release when the app starts and every 12 hours. Nothing is downloaded or installed, and nothing about you or your game is sent.</p>
+      <div id="update-msg" class="muted small"></div>
     </div>
 
     <div class="setup-step" id="lan-step" hidden>

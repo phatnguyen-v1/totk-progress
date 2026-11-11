@@ -157,6 +157,8 @@ const state = {
   qmode: store.get('qmode', 'active'),
   qtargets: store.get('qtargets', true),
   qstarts: store.get('qstarts', false),
+  // Spoiler-free: everything not found yet is a plain "?" (no type, name or Korok route), see render()
+  mystery: store.get('mystery', false),
   quests: null,      // definitions from /data/quests.json
   openQuest: null,
 };
@@ -233,8 +235,33 @@ const scaleIcons = () => {
 };
 map.on('zoomend', scaleIcons);
 scaleIcons();
+map.on('zoomend', () => { const r = unkRadius(); markerLayer.eachLayer(m => m instanceof UnkMarker && m.setRadius(r)); });
 const pathLayer = L.layerGroup().addTo(map);
 const iconCache = {};
+// In spoiler-free mode all ? markers are shown or hidden together, under this key in state.off: one filter per
+// category would tell which ? is a Korok and which a chest. The category filters then only apply to what's found.
+const UNK = 'undiscovered';
+// Drawn on one canvas, not as ~2,600 HTML markers (those made zooming drop to ~5 fps on the surface).
+const unkRenderer = L.canvas({ padding: 0.3 });
+const unkRadius = () => 10 * (parseFloat(map.getContainer().style.getPropertyValue('--s')) || 1);
+const UnkMarker = L.CircleMarker.extend({
+  _updatePath() {
+    const r = this._renderer;
+    r._updateCircle(this);
+    if (!r._drawing || this._empty()) return;
+    const ctx = r._ctx, p = this._point;
+    ctx.fillStyle = '#f1ead6';
+    ctx.font = `800 ${Math.round(this._radius * 1.25)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('?', p.x, p.y + 1);
+  },
+});
+const unkMarker = latlng => new UnkMarker(latlng, { renderer: unkRenderer, radius: unkRadius(), color: '#c9c2ae', weight: 1.5,
+  fillColor: '#3a3f46', fillOpacity: 1 });
+const unkPopup = o => `<div class="pop"><h3>${esc(t('mystery.label'))}</h3>
+  <div class="row">${esc(t('mystery.pop'))} · ${esc(layerName(layerOf(o.position.y)))}</div>
+  <div class="row">x ${Math.round(o.position.x)} · y ${Math.round(o.position.y)} · z ${Math.round(o.position.z)}</div></div>`;
 
 function icon(cat, done, found) {
   const k = cat.key + (done ? ':d' : found ? ':f' : '');
@@ -281,23 +308,29 @@ function render() {
   const q = state.tab === 'map' ? state.search.trim().toLowerCase() : '';
   const done = state.progress ? state.progress.done : {};
   const foundAll = (state.progress && state.progress.found) || {};
+  const unkOff = state.off.has(UNK);
   for (const cat of CATS) {
-    if (state.off.has(cat.key)) continue;
+    const catOff = state.off.has(cat.key);
+    if (catOff && (!state.mystery || unkOff)) continue;
     const list = state.data[cat.data] || [];
     const flags = done[cat.key] || [];
     const found = foundAll[cat.key] || [];
     list.forEach((o, i) => {
       const isDone = !!flags[i];
       const isFound = !isDone && !!found[i];
+      const hidden = state.mystery && !isDone && !isFound;
+      if (hidden ? unkOff : catOff) return;
       if (state.mode === 'missing' && isDone) return;
       if (state.mode === 'done' && !isDone) return;
       if (layerOf(o.position.y) !== state.layer) return;
-      if (q && !(objName(cat, o).toLowerCase().includes(q))) return;
-      const m = L.marker(toLatLng(o.position), { icon: icon(cat, isDone, isFound), riseOnHover: true, keyboard: false });
-      m.bindPopup(() => popupHtml(cat, o, isDone, isFound));
+      // a ? never matches a search: typing "Korok" would show which ones are Koroks
+      if (q && (hidden || !objName(cat, o).toLowerCase().includes(q))) return;
+      const m = hidden ? unkMarker(toLatLng(o.position))
+        : L.marker(toLatLng(o.position), { icon: icon(cat, isDone, isFound), riseOnHover: true, keyboard: false });
+      m.bindPopup(() => (hidden ? unkPopup(o) : popupHtml(cat, o, isDone, isFound)));
       markerLayer.addLayer(m);
       const path = o.path && (o.path.flowers ? o.path.flowers.map(f => f.position) : o.path.start && [o.path.start, o.path.end]);
-      if (path && !isDone) {
+      if (path && !isDone && !hidden) {
         pathLayer.addLayer(L.polyline(path.map(toLatLng), { color: cat.key === 'carry_korok' ? '#e3c27a' : '#6fd3c2', weight: 2, opacity: 0.8, dashArray: '4 4', interactive: false }));
         if (o.path.flowers) for (const f of path) pathLayer.addLayer(L.circleMarker(toLatLng(f), { radius: 2.5, color: '#f5a3d0', weight: 1, fillOpacity: 1, interactive: false }));
       }
@@ -330,7 +363,24 @@ function renderPlayer() {
 function renderLegend() {
   const done = state.progress ? state.progress.done : {};
   const el = $('#legend');
-  el.innerHTML = '';
+  el.innerHTML = `<label class="check mystery" title="${esc(t('mystery.hint'))}"><input type="checkbox" id="mystery" ${state.mystery ? 'checked' : ''}>
+    <span>${esc(t('mystery.toggle'))}</span></label>`;
+  el.querySelector('#mystery').onchange = e => { state.mystery = e.target.checked; store.set('mystery', state.mystery); renderLegend(); render(); };
+  if (state.mystery) {
+    const found = (state.progress && state.progress.found) || {};
+    let left = 0;
+    for (const cat of CATS) {
+      const d = done[cat.key] || [], f = found[cat.key] || [];
+      (state.data[cat.data] || []).forEach((o, i) => { if (!d[i] && !f[i]) left++; });
+    }
+    const b = document.createElement('button');
+    b.className = 'cat' + (state.off.has(UNK) ? ' off' : '');
+    b.title = state.off.has(UNK) ? t('legend.show') : t('legend.hide');
+    b.innerHTML = `<span class="unk-ico">?</span><span>${esc(t('mystery.label'))}</span><span class="n">${left}</span>`;
+    b.onclick = () => { state.off.has(UNK) ? state.off.delete(UNK) : state.off.add(UNK); store.set('off', [...state.off]); renderLegend(); render(); };
+    el.appendChild(b);
+    el.insertAdjacentHTML('beforeend', `<p class="mystery-note">${esc(t('mystery.note'))}</p>`);
+  }
   let group = null;
   for (const cat of CATS) {
     if (cat.group !== group) { group = cat.group; el.insertAdjacentHTML('beforeend', `<h2>${esc(group)}</h2>`); }
@@ -618,7 +668,7 @@ $('#qtargets').onchange = e => { state.qtargets = e.target.checked; store.set('q
 $('#qstarts').checked = state.qstarts;
 $('#qstarts').onchange = e => { state.qstarts = e.target.checked; store.set('qstarts', state.qstarts); renderQuestTargets(); };
 $('#all-on').onclick = () => { state.off.clear(); store.set('off', []); renderLegend(); render(); };
-$('#all-off').onclick = () => { CATS.forEach(c => state.off.add(c.key)); store.set('off', [...state.off]); renderLegend(); render(); };
+$('#all-off').onclick = () => { CATS.forEach(c => state.off.add(c.key)); state.off.add(UNK); store.set('off', [...state.off]); renderLegend(); render(); };
 $('#panel-toggle').onclick = () => document.body.classList.toggle('panel-open');
 // On small screens the open panel covers the ☰ button: close with ×, by tapping the map beside it, or Esc.
 const closePanel = () => document.body.classList.remove('panel-open');
@@ -665,6 +715,33 @@ function selectFolder(info) {
   ch.innerHTML = info && info.notes ? info.notes.map(n => `<div class="note">${esc(tMsg(n))}</div>`).join('') : '';
   $('#setup-go').disabled = !(info && info.ok);
 }
+
+// ---------- new versions (the server asks GitHub; see server.Updates)
+function renderUpdate(u) {
+  const v = u.latest && u.latest.version;
+  $('#update').hidden = !(u.newer && store.get('updateSkip', null) !== v);
+  if (v) {
+    $('#update-text').textContent = t('update.available', { v });
+    $('#update-link').href = u.latest.url;
+  }
+  $('#update-on').checked = !!u.enabled;
+  $('#update-msg').textContent = !u.enabled ? ''
+    : u.newer ? t('update.available', { v }) + ' ' + t('update.current', { v: u.current })
+    : v ? t('update.latest', { v: u.current })
+    : u.error ? t('update.failed') : t('update.checking');
+}
+async function checkUpdate() {
+  if (REMOTE) return;
+  try { renderUpdate(await getJSON('/api/update')); } catch {}
+}
+$('#update-skip').onclick = () => {   // hidden until a version newer than this one
+  getJSON('/api/update').then(u => { if (u.latest) store.set('updateSkip', u.latest.version); $('#update').hidden = true; }).catch(() => {});
+};
+$('#update-on').onchange = async e => {
+  try { renderUpdate(await post('/api/update', { enabled: e.target.checked })); } catch {}
+  setTimeout(checkUpdate, 4000);   // the check itself runs in the background
+};
+if (!REMOTE) { setTimeout(checkUpdate, 4000); setInterval(checkUpdate, 30 * 60 * 1000); }
 
 // ---------- Open on your phone
 function renderLan(st) {
@@ -724,6 +801,7 @@ async function openSetup(firstRun) {
     setup.current = st.ready && st.install ? st.install.path : null;
     $('#lan-step').hidden = firstRun;
     if (!firstRun) getJSON('/api/lan').then(renderLan).catch(() => {});
+    checkUpdate();
     renderLang(st.lang);
     selectFolder(st.install && st.install.ok ? st.install : (setup.candidates[0] || null));
     if (st.job.running) watchJob();

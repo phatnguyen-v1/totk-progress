@@ -6,7 +6,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --name TotKProgressMap --icon app.ico ^
   --add-data "web;web" ^
   --hidden-import zstandard --hidden-import texture2ddecoder --hidden-import PIL.WebPImagePlugin --hidden-import PIL.PngImagePlugin ^
-  --hidden-import webview --collect-all webview --hidden-import segno ^
+  --hidden-import webview --collect-all webview --hidden-import segno --hidden-import certifi ^
   server.py || goto :fail
 echo.
 echo Built: %~dp0dist\TotKProgressMap.exe

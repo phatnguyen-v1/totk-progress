@@ -3,3 +3,4 @@ texture2ddecoder>=1.0.5
 pillow>=10
 pywebview>=5
 segno>=1.5
+certifi
