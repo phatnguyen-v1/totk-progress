@@ -186,6 +186,51 @@ def parse_quests(path, quests, logic=None):
     return out
 
 
+ARMOR_NAMES = mmh3('Pouch.Armor.Content.Name')
+MATERIAL_NAMES = mmh3('Pouch.Material.Content.Name')
+MATERIAL_COUNTS = mmh3('Pouch.Material.Content.StockNum')
+
+
+def _array(buf, table, h, item, size):
+    """An array value: the table holds the offset of a u32 count followed by the items."""
+    off = table.get(h)
+    if off is None or not 0 < off <= len(buf) - 4:
+        return []
+    n = struct.unpack_from('<I', buf, off)[0]
+    if off + 4 + n * size > len(buf):
+        return []
+    return [item(buf, off + 4 + i * size) for i in range(n)]
+
+
+def _string64(buf, off):
+    return buf[off:off + 64].split(b'\0', 1)[0].decode('utf-8', 'replace')
+
+
+def parse_outfits(path, outfits):
+    """({piece id: [best level ever had (-1: never), best level in the inventory now (-1: not carried)]},
+    {material actor: count in the inventory}).
+
+    Each upgrade level is its own actor with its own IsGet.<actor> flag (set when Link first gets it, kept when
+    sold); the inventory is Pouch.Armor / Pouch.Material (64-byte names, and counts for materials).
+    """
+    buf = Path(path).read_bytes()
+    table, _ = read_table(buf)
+    carried = set(_array(buf, table, ARMOR_NAMES, _string64, 64))
+    names = _array(buf, table, MATERIAL_NAMES, _string64, 64)
+    counts = _array(buf, table, MATERIAL_COUNTS, lambda b, o: struct.unpack_from('<i', b, o)[0], 4)
+    mats = {}
+    for n, c in zip(names, counts):
+        if n and c > 0:
+            mats[n] = mats.get(n, 0) + c
+    out = {}
+    for s in outfits:
+        for p in s['pieces']:
+            ever = max((i for i, lv in enumerate(p['levels']) if table.get(lv['flag'])), default=-1)
+            now = max((i for i, lv in enumerate(p['levels']) if lv['actor'] in carried), default=-1)
+            out[p['id']] = [max(ever, now), now]
+    return out, mats
+
+
 def _check(buf):
     if len(buf) < TABLE_START + 8 or struct.unpack_from('<I', buf, 0)[0] != HEADER_MAGIC:
         raise SaveError('not a TotK progress.sav (bad header)')

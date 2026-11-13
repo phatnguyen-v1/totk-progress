@@ -60,6 +60,9 @@ DATA_KEYS = ['shrines', 'lightroots', 'hidden_koroks', 'carry_koroks', 'bubbuls'
              'armor_chests', 'treasure_chests']
 
 
+SHOP_ACTORS = ('Npc_', 'TwnObj_DemonStatue', 'FldObj_AmosStatue')   # who may sell armor (see `placed`)
+
+
 def basename(path):
     return path.rsplit('/', 1)[-1].split('.', 1)[0] if path else ''
 
@@ -68,7 +71,9 @@ def pos(t):
     return {'x': round(t[0], 2), 'y': round(t[1], 2), 'z': round(t[2], 2)}
 
 
-def build(romfs, out=OUT, lang='USen', log=print):
+def build(romfs, out=OUT, lang='USen', log=print, placed=None):
+    """Write map_data.json. `placed`, when a dict, also gets {actor: [positions]} of the shopkeepers and Bargainer
+    statues (for build_outfits, so the placement data is only read once)."""
     rf = gamefiles.Romfs(romfs)
     mals = gamefiles.sarc(rf.read(rf.find(f'Mals/{lang}.Product.', '.sarc.zs')[-1]))
 
@@ -162,6 +167,8 @@ def build(romfs, out=OUT, lang='USen', log=print):
             g, h, t = a.get('Gyaml') or '', a.get('Hash'), a.get('Translate')
             if not h or not t or h in seen:
                 continue
+            if placed is not None and g.startswith(SHOP_ACTORS):
+                placed.setdefault(g, []).append(t)
             if g in KOROK_ACTORS:
                 korok_kind[h] = (g, (a.get('Dynamic') or {}).get('HideType'))
             elif g == 'Obj_Plant_Korok_A_01':
@@ -213,7 +220,7 @@ def build(romfs, out=OUT, lang='USen', log=print):
                 else:   # every other chest; opened chests are in the save's GUID list
                     seen.add(h)
                     key = 'armor_chests' if drop.startswith('Armor_') else 'treasure_chests'
-                    data[key].append({'guid_hash': str(h), 'position': pos(t),
+                    data[key].append({'guid_hash': str(h), 'position': pos(t), **({'drop': drop} if key == 'armor_chests' else {}),
                                       'display_name': item_name(drop) or ('Armor' if key == 'armor_chests' else 'Treasure chest')})
 
     trails = flower_trails(flowers)
