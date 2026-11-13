@@ -1,5 +1,7 @@
 # TotK Progress Map
 
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/phatnguyen-v1)
+
 ![The map: what's still missing around Link's last save, with Korok puzzle routes](docs/screenshots/map.webp)
 
 A companion app for [TotK Recomp](https://github.com/valentderah/totk-pc-recomp), the native PC port of *Tears of the Kingdom*.
