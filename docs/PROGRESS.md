@@ -2,14 +2,14 @@
 
 Where the project stands, what was learned along the way, and what's next. Update it with each stage.
 
-## Status (2026-11-11)
+## Status (2026-11-13)
 
 | | |
 |---|---|
-| Latest release | [v1.7.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.7.0): spoiler-free mode (? markers), new-version notice (GitHub releases, off in Settings) |
-| Release files | `TotKProgressMap.exe` 24.8 MB, SHA-256 `b4c623f3ee2e63586b6d2bc28c2e5b78a2d40d80445aa84ae18fd7350d99ab99`; `TotKProgressMap-linux-x86_64` 43.0 MB, SHA-256 `bd4b2bdf4088a70508fc68e0f47daa25a25047d560e44dd3295ec2c5b35d795e` |
-| VirusTotal | v1.7.0 not scanned yet. v1.6.0 exe: 2 of 71 (Bkav Pro, SecureAge), every major engine clean |
-| Release check | CI: both builds, Linux start-up smoke test. The CI exe started on the owner's PC: update check reached GitHub (1.7.0 = latest, no notice). Spoiler-free mode and the notice checked in the browser |
+| Latest release | [v1.8.0](https://github.com/phatnguyen-v1/totk-progress/releases/tag/v1.8.0): Outfits tab (every armor piece, upgrades, where to get it), map tiles as image/webp (PR #4) |
+| Release files | `TotKProgressMap.exe` 24.8 MB, SHA-256 `346bd6e7739d98078d9f7a3259d7d618dafbbec85dd0ed674d97bc15f31283c5`; `TotKProgressMap-linux-x86_64` 43.0 MB, SHA-256 `ae3f7f94bb3d1ba51342af040ab8d69b0dc56786fd54d0d06629039bef5d17ca` |
+| VirusTotal | v1.8.0 not scanned yet. v1.6.0 exe: 2 of 71 (Bkav Pro, SecureAge), every major engine clean |
+| Release check | CI: both builds, Linux start-up smoke test. From source against the owner's save: upgrade from v1.7.0 data, Outfits tab, filters, Show on map on the surface and in the Depths. Not yet checked against a save with upgraded armor (the owner's saves are early) |
 | Tested on | TotK Recomp v0.3.13 with game 1.2.1, English (USen), saves on `F:`; game 1.4.3 (owner 2026-11-10; a Reddit user with Recomp 0.3.7 + 1.4.3). Linux: CI smoke test only |
 
 ### Next up
