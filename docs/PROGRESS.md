@@ -17,7 +17,7 @@ Where the project stands, what was learned along the way, and what's next. Updat
 2. Still untested: the Linux build on a real desktop / Steam Deck, the Browse… folder picker, a game folder
    outside `<drive>:\Games\TotK`, another Windows user.
 3. The interface translations are drafts: corrections from native speakers welcome (`web/i18n/<code>.json`).
-4. Later: Hyrule Compendium, armor upgrades; BotW (issue #2) is now its own app, [botw-progress](https://github.com/phatnguyen-v1/botw-progress) (v0.1.0, 2026-11-11); SignPath code signing
+4. Later: Hyrule Compendium; BotW (issue #2) is now its own app, [botw-progress](https://github.com/phatnguyen-v1/botw-progress) (v0.1.0, 2026-11-11); SignPath code signing
    once the project is more established.
 
 ## Done
@@ -122,6 +122,25 @@ Map UI icons live in `UI/LayoutArchive/Common.Product.110.Nin_NX_NVN.blarc.zs` (
 `timg/__Combined.bntx` (1,231 textures). Texture name at `BRTI+0x60` (pointer to u16 length + text).
 Formats seen: `0x2d06` ASTC 4x4 sRGB (`^w` white glyphs), `0x1d01` BC4 (`^s` masks, value = coverage),
 plus BC5/BC1/BC3/BC7; `maptiles.decode_texture` handles all of them.
+
+## v1.8.0 (released 2026-11-13): Outfits tab, map tiles as image/webp
+
+- Outfits tab, ported from the BotW app (`build_outfits.py` -> `assets/outfits.json` + `outfiticons/`):
+  135 pieces in 52 sets. Pieces: `RSDB/PouchActorInfo` rows with `PouchCategory: Armor`, minus upgrades
+  (`ArmorNextRankActor` targets), `_B` hood-down variants and pieces without a name. Set:
+  `ArmorParam.SeriesName` in the actor pack (no text in the game, so `SETS` names them in English; pieces
+  without a series are grouped by `GROUPS`). Upgrade cost: the pack's `GameParameterTable` ->
+  `EnhancementMaterial` (Items + Price) of the level below. Some materials are named, and kept in the
+  inventory, as the picked-up actor (`Item_Plant_O` -> `Item_PlantGet_O`, `Animal_Fish_M` -> `Item_FishGet_M`).
+- Where to get it: `Component/ShopParam` `GoodsList` in 11 shopkeepers' and the Bargainer statues' packs
+  (`Currency: MinusRupee` = poes, price = BuyingPrice + PriceOffset; `ReleaseRequirements.IsCheckGetFlag` =
+  sold once you've found it, `ReleaseGameData` = stocked later), and the armor chests (`build_mapdata`
+  now keeps each chest's `drop`, and passes the shopkeepers' positions on so the placement data is read
+  once). Only Zora Armor and Lightning Helm (quest rewards) have no source in the files.
+- Save: `IsGet.<actor>` per piece and level; `Pouch.Armor.Content.Name` (64-byte strings) and
+  `Pouch.Material.Content.Name` / `.StockNum` (u32 count, then the items). DATA_VERSION 6.
+- Map tiles are sent as `image/webp` (PR #4 by eUnisk): `mimetypes` asks the Windows registry, which often
+  has no `.webp`, and download managers such as IDM took the tiles for file downloads.
 
 ## v1.7.0 (released 2026-11-11): spoiler-free mode, update notice
 

@@ -34,6 +34,12 @@ in the adventure log (36 quests). Letters, statues and the Mysterious Voice aren
 |---|---|
 | ![Quests tab with the current step of a quest](docs/screenshots/quests.webp) | ![Zoomed out: everything still missing on the surface](docs/screenshots/overview.webp) |
 
+The **Outfits** tab lists every armor piece (135, in 52 sets) with its picture: whether you have it
+and at which upgrade level, the Great Fairy upgrade materials and rupees with how many of each you
+carry, and where to get it: the shop and its price (rupees, or poes at the Bargainer statues), or the
+treasure chest. "Show on map" marks the shop or chest. Filters: Missing, Have, Upgrade (have it, not
+fully upgraded), All.
+
 **Spoiler-free mode** (the checkbox at the top of the map legend) shows everything you haven't found
 yet as a plain **?**: no name, no chest contents, no Korok puzzle. Things you've found keep their
 icons. All the **?** markers share one *Undiscovered* filter, so the filters can't give away what each one is.
