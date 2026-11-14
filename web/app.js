@@ -187,26 +187,43 @@ const map = L.map('map', { crs: L.CRS.Simple, minZoom: -1.5, maxZoom: 3, zoomSna
 const bounds = [[-SIZE, 0], [0, SIZE]];
 const overlays = {};
 // Map built from the game's own map tiles: 12 x 10 tiles of 1000 world units = 125 units in this 1500 px space,
-// rows start 125 px down (z -5000). Two detail levels: 300 px tiles zoomed out, 840 px tiles zoomed in.
+// rows start 125 px down (z -5000). Three detail levels: 300 px tiles zoomed out, 840 px tiles zoomed in, and
+// the game's 3000 px tiles for the closest zoom (as close as the game's own map), each cut into split x split pieces.
 const GameTiles = L.TileLayer.extend({
   // ?v=: a new URL after the tiles are redrawn, so the browser doesn't keep showing cached old tiles
   getTileUrl(c) { return `/assets/tiles/${this.options.layerName}/${this.options.lod}/${c.x}-${c.y - 1}.webp?v=${state.tileStamp}`; },
+});
+// A split level is a tile layer at native zoom log2(split): its pieces are 125 px there too, and the first row of
+// pieces starts `split` pieces down. Piece (x, y) is tile (x / split, (y - split) / split), piece (x % split, ...).
+const SplitTiles = L.TileLayer.extend({
+  getTileUrl(c) {
+    const n = this.options.split, y = c.y - n;
+    return `/assets/tiles/${this.options.layerName}/${this.options.lod}/${Math.floor(c.x / n)}-${Math.floor(y / n)}-${c.x % n}-${y % n}.webp?v=${state.tileStamp}`;
+  },
 });
 // The 840 px tiles are added on top from this zoom on. Switched here, not with the layers' minZoom/maxZoom:
 // Leaflet rounds the zoom before checking those, so with quarter-step zooms both layers could be off at
 // once (e.g. 1.25 rounds to 1) and the map went black in places. The 300 px layer always stays underneath,
 // so there's no gap while detailed tiles load.
 const DETAIL_ZOOM = 1.25;
+// The 3000 px pieces from where the 840 px tiles would start to be stretched (840 = 125 * 2^2.75), up to MAX_ZOOM.
+const FINE_ZOOM = 2.75, MAX_ZOOM = 4;
 function gameTileLayer(name) {
   const common = { layerName: name, tileSize: 125, minNativeZoom: 0, maxNativeZoom: 0, minZoom: -10, maxZoom: 10,
     noWrap: true, bounds: L.latLngBounds([[-1375, 0], [-125, 1500]]), keepBuffer: 4 };
   const far = new GameTiles('', { ...common, lod: '02', zIndex: 1 });
   const near = new GameTiles('', { ...common, lod: '01', zIndex: 2 });
+  const split = state.tileSplit && state.tileSplit['00'];
+  const z = split && Math.log2(split);
+  const fine = split ? new SplitTiles('', { ...common, lod: '00', split, minNativeZoom: z, maxNativeZoom: z, zIndex: 3, keepBuffer: 2 }) : null;
   const group = L.layerGroup([far]);
+  const toggle = (layer, want) => {
+    if (want && !group.hasLayer(layer)) group.addLayer(layer);
+    else if (!want && group.hasLayer(layer)) group.removeLayer(layer);
+  };
   group.syncDetail = () => {
-    const want = map.getZoom() >= DETAIL_ZOOM;
-    if (want && !group.hasLayer(near)) group.addLayer(near);
-    else if (!want && group.hasLayer(near)) group.removeLayer(near);
+    toggle(near, map.getZoom() >= DETAIL_ZOOM);
+    if (fine) toggle(fine, map.getZoom() >= FINE_ZOOM);
   };
   return group;
 }
@@ -215,6 +232,9 @@ async function setupBaseMaps() {
   let meta = null;
   try { meta = await getJSON('/assets/tiles/meta.json'); } catch {}
   state.tileStamp = meta ? (meta.built || meta.version || 1) : 1;
+  // the closest zoom once the 3000 px level is drawn (older installs draw it in the background update)
+  state.tileSplit = meta && (meta.lods || []).includes('00') ? meta.split || null : null;
+  if (state.tileSplit) map.setMaxZoom(MAX_ZOOM);
   // tiles drawn from the player's game files at setup; without them the map stays blank but markers still work
   for (const l of ['surface', 'sky', 'depths']) overlays[l] = gameTileLayer(l);
   state.mapSource = meta ? 'game' : 'none';
