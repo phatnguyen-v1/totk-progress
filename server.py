@@ -47,12 +47,14 @@ def have_assets():
 
 
 def tiles_current():
-    """Map tiles drawn by the current tile code (older ones get redrawn)."""
+    """Map tiles drawn by the current tile code (older ones get redrawn), in every detail level the map uses (a level
+    added later, such as 00 for the closest zoom, is drawn in the background update; the others are kept)."""
     import maptiles
     try:
-        return json.loads((ASSETS / 'tiles' / 'meta.json').read_text(encoding='utf-8')).get('version') == maptiles.TILES_VERSION
+        meta = json.loads((ASSETS / 'tiles' / 'meta.json').read_text(encoding='utf-8'))
     except (OSError, ValueError):
         return False
+    return meta.get('version') == maptiles.TILES_VERSION and set(maptiles.LODS) <= set(meta.get('lods') or [])
 
 
 def built_version():

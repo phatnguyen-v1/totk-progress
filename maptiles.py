@@ -115,8 +115,16 @@ def pick_variants(romfs, prefix):
     return {k: v[1] for k, v in best.items()}
 
 
-def build_tiles(romfs, out_dir, lods=('02', '01'), progress=None):
-    """Decode the chosen map tiles to out_dir/<layer>/<lod>/<col>-<row>.png. Returns the number of tiles."""
+# The detail levels the map uses, coarse to fine. 00 (3000 px a tile) is for zooming in as far as the game's own map;
+# each of its tiles is cut into SPLIT x SPLIT pieces so the page loads only the 750 px pieces on screen.
+LODS = ('02', '01', '00')
+SPLIT = {'00': 4}
+
+
+def build_tiles(romfs, out_dir, lods=LODS, progress=None):
+    """Decode the chosen map tiles to out_dir/<layer>/<lod>/<col>-<row>.webp (a split level: <col>-<row>-<sx>-<sy>.webp,
+    sx/sy the piece's column and row inside the tile). Tiles already there are kept, so adding a level later only
+    draws that level. Returns the number of tiles."""
     import json
     from pathlib import Path
     out_dir = Path(out_dir)
@@ -134,15 +142,22 @@ def build_tiles(romfs, out_dir, lods=('02', '01'), progress=None):
             for name, c in LAYERS.items() if c == code and lod in lods]
     from PIL import Image
     for i, (name, lod, col, row, path) in enumerate(todo):
-        dest = out_dir / name / lod / f'{col}-{row}.webp'
-        if not dest.is_file():
-            dest.parent.mkdir(parents=True, exist_ok=True)
+        n = SPLIT.get(lod, 1)
+        pieces = [(out_dir / name / lod / (f'{col}-{row}.webp' if n == 1 else f'{col}-{row}-{sx}-{sy}.webp'), sx, sy)
+                  for sy in range(n) for sx in range(n)]
+        if not all(dest.is_file() for dest, _, _ in pieces):
+            pieces[0][0].parent.mkdir(parents=True, exist_ok=True)
             w, h, px = decode_bntx(romfs.read(path))
-            tmp = dest.with_suffix('.part')
-            Image.frombytes('RGBA', (w, h), px).convert('RGB').save(tmp, 'WEBP', quality=80, method=4)
-            tmp.replace(dest)
+            img = Image.frombytes('RGBA', (w, h), px).convert('RGB')
+            pw, ph = w // n, h // n
+            for dest, sx, sy in pieces:
+                tmp = dest.with_suffix('.part')
+                part = img if n == 1 else img.crop((sx * pw, sy * ph, (sx + 1) * pw, (sy + 1) * ph))
+                part.save(tmp, 'WEBP', quality=80, method=4)
+                tmp.replace(dest)
         report((i + 1) / len(todo), f'Drawing the {name} map… {i + 1}/{len(todo)}')
     (out_dir / 'meta.json').write_text(json.dumps({
-        'version': TILES_VERSION, 'built': int(__import__('time').time()), 'source': 'game', 'format': 'webp', 'lods': list(lods), 'cols': 12, 'rows': 10, 'tile_world': 1000,
+        'version': TILES_VERSION, 'built': int(__import__('time').time()), 'source': 'game', 'format': 'webp', 'lods': list(lods),
+        'split': {k: v for k, v in SPLIT.items() if k in lods}, 'cols': 12, 'rows': 10, 'tile_world': 1000,
         'origin': [-6000, -5000], 'layers': list(LAYERS)}))
     return len(todo)
